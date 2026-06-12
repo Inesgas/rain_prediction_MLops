@@ -85,9 +85,7 @@ METHOD_REFERENCES = {
         "This experiment uses a custom hybrid imputer: same-date nearby-station donor fill first, "
         "then train-only weather-regime medians by location/season as fallback."
     ),
-    "source_links": [
-        "C:/Users/user 1/Downloads/australia-rain-location-based-null-imputation.ipynb"
-    ],
+    "source_links": ["australia-rain-location-based-null-imputation"],
     "why_it_is_different": (
         "Unlike standard mean/median/KNN/Iterative imputers, this approach uses station geography, "
         "same-day cross-station agreement, and train-only seasonal weather regimes."

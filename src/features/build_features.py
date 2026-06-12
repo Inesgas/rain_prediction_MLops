@@ -221,7 +221,7 @@ def get_zone_from_grid(df, nc_path, grid_var, legend_var, legend_dim, zone_col_n
 
     The function dynamically handles different BoM (Bureau of Meteorology) 
     grid structures and applies internal cleaning for inconsistent IDs 
-    (e.g., Temperature/Humidity placeholders) and verbose descriptions.
+    and verbose descriptions.
 
     Args:
         df (pd.DataFrame): DataFrame containing 'location', 'lat', and 'lon' columns.
@@ -548,7 +548,7 @@ def add_overnight_diffs(df, prefixes=['humidity', 'temp', 'wind_speed', 'pressur
         col_9am = f"{p}_9am"
         col_3pm = f"{p}_3pm"
         if col_9am in df.columns and col_3pm in df.columns:
-            #create a temporary mapping for yesterday's 3pm values
+            # Build mapping for yesterday's 3pm values.
             temp = df[['date', 'location', col_3pm]].copy()
             #shift the date forward by 1 day so it matches 'today'
             temp['date'] = temp['date'] + pd.Timedelta(days=1)
@@ -560,7 +560,7 @@ def add_overnight_diffs(df, prefixes=['humidity', 'temp', 'wind_speed', 'pressur
             #calculate the difference
             df[f"{p}_overnight_diff"] = df[col_9am] - df[f"{p}_3pm_yest"]
             
-            #drop the temporary helper column
+            # Remove the helper column after the difference is computed.
             df = df.drop(columns=[f"{p}_3pm_yest"])
         else:
             print(f"Note: Could not create overnight diff for '{p}'(Columns not found).")
@@ -581,7 +581,7 @@ def add_yesterday_lag(df, columns=['humidity_3pm','cloud_3pm','max_temp','min_te
         columns = [columns]
         
     for col in columns:
-        #create a temporary dataframe with the shifted date
+        # Build a shifted-date helper frame for yesterday's values.
         temp = df[['date', 'location', col]].copy()
         #shift 'date' forward by 1 day so it matches 'today'
         temp['date'] = temp['date'] + pd.Timedelta(days=1)
@@ -637,7 +637,7 @@ def add_24h_diff(df, columns=['evaporation','min_temp','max_temp','pressure_3pm'
     df['date'] = pd.to_datetime(df['date'])
     for col in columns: 
         if col in df.columns:
-            #create a temporary mapping for yesterday's 3pm values
+            # Build mapping for yesterday's values.
             temp = df[['date', 'location', col]].copy()
             #shift the date forward by 1 day so it matches 'today'
             temp['date'] = temp['date'] + pd.Timedelta(days=1)
@@ -648,7 +648,7 @@ def add_24h_diff(df, columns=['evaporation','min_temp','max_temp','pressure_3pm'
             #calculate the difference
             df[f"{col}_24h_diff"] = df[col] - df[f"{col}_yest"]
 
-            #drop the temporary helper column
+            # Remove the helper column after the difference is computed.
             df = df.drop(columns=[f"{col}_yest"])
         else:
             print(f"Note: Could not create 24h diff for '{col}'(Column not found).")
