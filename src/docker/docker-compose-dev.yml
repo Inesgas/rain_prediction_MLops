@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  prediction:
+    build:
+      context: ../..
+      dockerfile: src/docker/prediction/prediction.Dockerfile
+    image: rain-prediction-api:winner
+    container_name: rain_prediction_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../../src:/app/src
+      - ../../models:/app/models
+
+  training:
+    build:
+      context: ../..
+      dockerfile: src/docker/training/training.Dockerfile
+    image: rain-prediction-training:winner
+    container_name: rain_prediction_training
+    volumes:
+      - ../../src:/app/src
+      - ../../data:/app/data
+      - ../../models:/app/models
+      - ../../references:/app/references
+
+  dashboard:
+    build:
+      context: ../..
+      dockerfile: src/docker/frontend/frontend.Dockerfile
+    image: rain-prediction-dashboard:winner
+    container_name: rain_prediction_dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://prediction:8000
+    volumes:
+      - ../../src:/app/src
+    depends_on:
+      - prediction

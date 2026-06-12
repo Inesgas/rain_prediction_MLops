@@ -1,0 +1,17 @@
+path,category,storage,size_mb,role
+data/raw/weatherAUS.csv,raw,DVC/DagsHub,13.44,Original weather dataset
+data/preprocessed/rain_model_dataset.csv,processed,DVC/DagsHub,90.69,Main processed modeling table
+data/preprocessed/rain_model_dataset_aligned.csv,processed,DVC/DagsHub,99.25,Aligned processed table used by the winner feature workflow
+data/preprocessed/rain_model_dataset_feature_experiments.csv,processed,DVC/DagsHub,121.51,Extended processed table used for feature experiments
+data/preprocessed/ines_selected_top25_features.txt,processed,Git,0.00,Selected top-25 feature list
+data/preprocessed/ines_selected_top25_features_aligned.txt,processed,Git,0.00,Aligned top-25 feature list retained as modeling evidence
+data/preprocessed/ines_selected_top25_features_feature_experiments.txt,processed,Git,0.00,Feature-experiment top-25 feature list
+data/preprocessed/ines_feature_ranking.csv,processed,Git,0.00,Feature ranking output
+data/preprocessed/ines_feature_ranking_aligned.csv,processed,Git,0.00,Aligned feature ranking output
+data/preprocessed/ines_feature_ranking_feature_experiments.csv,processed,Git,0.01,Feature-experiment ranking output
+data/preprocessed/locations_metadata.csv,processed,Git,0.00,Station metadata used by downstream interfaces
+data/preprocessed/daily_zonal_locations_metadata.csv,processed,Git,0.00,Derived station metadata used by the winner feature builder
+references/koppen_zones_grid.nc,external,Git,0.04,Koppen climate zone reference grid
+references/seasonal_rainfall_zones_grid.nc,external,Git,0.04,Seasonal rainfall zone reference grid
+references/stations.txt,external,Git,2.55,Station reference data
+references/temperature_humidity_zones_grid.nc,external,Git,0.06,Temperature and humidity zone reference grid

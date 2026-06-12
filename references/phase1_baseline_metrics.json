@@ -1,0 +1,44 @@
+{
+  "model_name": "logistic_regression_baseline",
+  "model_role": "baseline evaluation model",
+  "feature_count": 25,
+  "threshold": 0.58,
+  "metrics": {
+    "roc_auc": 0.8619808846254682,
+    "accuracy": 0.8199303772987798,
+    "f1": 0.6297983083929733,
+    "precision": 0.5820416889363976,
+    "recall": 0.686092297999685
+  },
+  "rows": {
+    "train": 113754,
+    "test": 28439
+  },
+  "features": [
+    "humidity_3pm",
+    "location",
+    "moisture_stability_3pm",
+    "rain_today",
+    "dew_point_spread_3pm",
+    "seasonal_rainfall_zone",
+    "koppen_zone",
+    "land_strip",
+    "sunshine",
+    "wind_gust_speed",
+    "pressure_humidity_3pm_ratio",
+    "temperature_humidity_zone",
+    "rainfall_missing",
+    "rainfall",
+    "cloud_humidity_3pm_interaction",
+    "pressure_3pm",
+    "pressure_overnight_change",
+    "cloud_3pm",
+    "humidity_3pm_missing",
+    "wind_dir_3pm_x",
+    "humidity_temp_3pm_interaction",
+    "pressure_9am",
+    "lon",
+    "dewpoint_3pm",
+    "lat"
+  ]
+}

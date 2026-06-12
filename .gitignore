@@ -1,0 +1,17 @@
+*.py[cod]
+__pycache__/
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+*.log
+.env
+.DS_Store
+
+# Local runtime outputs
+data/cleaned/*
+!data/cleaned/.gitkeep
+models/tmp/
+reports/*
+!reports/figures/
+!reports/figures/.gitkeep
