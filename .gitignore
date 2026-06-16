@@ -1,17 +1,89 @@
-*.py[cod]
+# Python
 __pycache__/
+*.pyc
+*.pyo
 .pytest_cache/
-.ipynb_checkpoints/
-.venv/
-venv/
-*.log
-.env
-.DS_Store
+.tox/
+.mypy_cache/
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
 
-# Local runtime outputs
-data/cleaned/*
-!data/cleaned/.gitkeep
-models/tmp/
-reports/*
-!reports/figures/
-!reports/figures/.gitkeep
+# Virtuelle Umgebungen
+venv/
+env/
+.venv/
+ENV/
+
+# IDEs / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# DATA (GROSS – nur DVC)
+data/raw/
+data/processed/
+data/preprocessed/
+data/cleaned/
+*.csv
+
+# MODELS (GROSS – nur DVC)
+models/final_winner/*.joblib
+models/final_winner/*.pkl
+*.joblib
+*.pkl
+
+# MLflow (GROSS)
+mlflow/artifacts/
+mlflow/db/
+mlflow/*.db
+mlflow/*.db-journal
+
+# GRAFANA
+grafana/provisioning/dashboards/*.json
+grafana/provisioning/datasources/*.yml
+grafana/*.db
+
+# PROMETHEUS
+prometheus/*.db
+prometheus/*.log
+
+# DOCKER
+*.pid
+*.sock
+.dockerignore
+
+# LOGS
+*.log
+logs/
+
+# ZERTIFIKATE / GEHEIMNISSE
+nginx/certs/*.crt
+nginx/certs/*.key
+.env
+.env.local
+.env.*.local
+
+# DVC – NUR den Cache ignorieren, nicht .dvc selbst!
+.dvc/cache/
+.dvc/tmp/
+
+# TESTS / COVERAGE
+.coverage
+htmlcov/
+.pytest_cache/
+
+# SONSTIGES
+*.tmp
+*.temp
