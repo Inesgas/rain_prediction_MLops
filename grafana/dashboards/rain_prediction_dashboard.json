@@ -1,0 +1,194 @@
+{
+  "dashboard": {
+    "title": "Rain Prediction MLOps Dashboard",
+    "tags": ["mlops", "fastapi", "rain-prediction"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "title": "Predictions per Location",
+        "type": "barchart",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(rain_predictions_total) by (location)",
+            "legendFormat": "{{location}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {"mode": "palette-classic"}
+          }
+        }
+      },
+      {
+        "title": "Predictions over Time",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(rate(rain_predictions_total[1h])) by (location)",
+            "legendFormat": "{{location}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "cps",
+            "custom": {"lineInterpolation": "smooth"}
+          }
+        }
+      },
+      {
+        "title": "Prediction Confidence (95th Percentile)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(rain_prediction_confidence_bucket[5m])) by (le))",
+            "legendFormat": "95th Percentile",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "custom": {"lineInterpolation": "smooth"}
+          }
+        }
+      },
+      {
+        "title": "Confidence Distribution",
+        "type": "histogram",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(rain_prediction_confidence_bucket[5m])) by (le)",
+            "legendFormat": "le={{le}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "title": "Input Humidity per Location (Data Drift)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "avg(rain_input_humidity) by (location)",
+            "legendFormat": "{{location}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "custom": {"lineInterpolation": "smooth"}
+          }
+        }
+      },
+      {
+        "title": "Input Pressure per Location",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "avg(rain_input_pressure) by (location)",
+            "legendFormat": "{{location}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "hPa",
+            "custom": {"lineInterpolation": "smooth"}
+          }
+        }
+      },
+      {
+        "title": "HTTP Requests per Endpoint",
+        "type": "barchart",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total[1h])) by (handler)",
+            "legendFormat": "{{handler}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "cps"
+          }
+        }
+      },
+      {
+        "title": "HTTP Error Rate (5xx)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))",
+            "legendFormat": "Error Rate",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "custom": {"lineInterpolation": "smooth"}
+          }
+        }
+      },
+      {
+        "title": "Model Load Time",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 32},
+        "targets": [
+          {
+            "expr": "rain_model_load_time_seconds",
+            "legendFormat": "Load Time",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 5},
+                {"color": "red", "value": 10}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Prediction Errors",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 32},
+        "targets": [
+          {
+            "expr": "sum(rain_prediction_errors_total)",
+            "legendFormat": "Errors",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "red", "value": 1}
+              ]
+            }
+          }
+        }
+      }
+    ]
+  },
+  "overwrite": false
+}
