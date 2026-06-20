@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import json
-import threading
-from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from fastapi.testclient import TestClient
 
-from src.models.api import create_server
+from src.models.api import create_app
 from src.models.inference import WeatherInferenceService
 
 
@@ -29,62 +26,47 @@ def make_service() -> WeatherInferenceService:
 
 
 def test_api_health_and_predict_endpoints() -> None:
-    server = create_server("127.0.0.1", 0, make_service())
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    base_url = f"http://127.0.0.1:{server.server_address[1]}"
+    client = TestClient(create_app(make_service()))
 
-    try:
-        with urlopen(f"{base_url}/health", timeout=5) as response:
-            health = json.loads(response.read().decode("utf-8"))
-        assert health["status"] == "ok"
-        assert health["service"] == "weather-winner-inference-api"
-        assert health["model_name"] == "api_test_model"
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["status"] == "ok"
+    assert health.json()["service"] == "weather-winner-inference-api"
+    assert health.json()["model_name"] == "api_test_model"
 
-        with urlopen(f"{base_url}/model-info", timeout=5) as response:
-            model_info = json.loads(response.read().decode("utf-8"))
-        assert model_info["service"] == "weather-winner-inference-api"
-        assert model_info["required_features"] == ["humidity_3pm", "rain_today"]
+    model_info = client.get("/model-info")
+    assert model_info.status_code == 200
+    assert model_info.json()["service"] == "weather-winner-inference-api"
+    assert model_info.json()["required_features"] == ["humidity_3pm", "rain_today"]
 
-        request = Request(
-            f"{base_url}/predict",
-            data=json.dumps({"humidity_3pm": 70, "rain_today": "Yes"}).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urlopen(request, timeout=5) as response:
-            prediction = json.loads(response.read().decode("utf-8"))
-        assert prediction["service"] == "weather-winner-inference-api"
-        assert prediction["predicted_label"] == "Rain"
-        assert prediction["probability_rain"] == 0.7
-    finally:
-        server.shutdown()
-        thread.join(timeout=5)
+    prediction = client.post("/predict", json={"humidity_3pm": 70, "rain_today": "Yes"})
+    assert prediction.status_code == 200
+    assert prediction.json()["service"] == "weather-winner-inference-api"
+    assert prediction.json()["predicted_label"] == "Rain"
+    assert prediction.json()["probability_rain"] == 0.7
+    assert "X-Request-ID" in prediction.headers
 
 
 def test_api_returns_structured_payload_errors() -> None:
-    server = create_server("127.0.0.1", 0, make_service())
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    base_url = f"http://127.0.0.1:{server.server_address[1]}"
+    client = TestClient(create_app(make_service()))
 
-    try:
-        request = Request(
-            f"{base_url}/predict",
-            data=json.dumps({"humidity_3pm": 70}).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            urlopen(request, timeout=5)
-            raise AssertionError("Expected HTTP 422 for missing features")
-        except HTTPError as exc:
-            assert exc.code == 422
-            error = json.loads(exc.read().decode("utf-8"))
+    response = client.post("/predict", json={"humidity_3pm": 70})
 
-        assert error["status"] == "error"
-        assert error["error"] == "invalid_payload"
-        assert error["missing_features"] == ["rain_today"]
-    finally:
-        server.shutdown()
-        thread.join(timeout=5)
+    assert response.status_code == 422
+    error = response.json()
+    assert error["status"] == "error"
+    assert error["error"] == "invalid_payload"
+    assert error["missing_features"] == ["rain_today"]
+
+
+def test_api_rejects_oversized_request_body() -> None:
+    client = TestClient(create_app(make_service()))
+
+    response = client.post(
+        "/predict",
+        content=b"{}",
+        headers={"content-length": "999999"},
+    )
+
+    assert response.status_code == 413
+    assert response.json()["error"] == "request_too_large"

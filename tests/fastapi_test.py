@@ -25,11 +25,25 @@ else:
     print("🔧 Running ON HOST - using localhost")
 
 VERIFY_SSL = False
+ADMIN_USERNAME = os.getenv("NGINX_ADMIN_USER")
+ADMIN_PASSWORD = os.getenv("NGINX_ADMIN_PASSWORD")
+REGULAR_USERNAME = os.getenv("NGINX_REGULAR_USER", "admin")
+REGULAR_PASSWORD = os.getenv("NGINX_REGULAR_PASSWORD")
 
 def get_auth_header(username, password):
     credentials = f"{username}:{password}"
     encoded = base64.b64encode(credentials.encode()).decode()
     return {"Authorization": f"Basic {encoded}"}
+
+def get_admin_auth_header():
+    if not ADMIN_USERNAME or not ADMIN_PASSWORD:
+        pytest.skip("Set NGINX_ADMIN_USER and NGINX_ADMIN_PASSWORD to run Nginx authenticated integration tests.")
+    return get_auth_header(ADMIN_USERNAME, ADMIN_PASSWORD)
+
+def get_regular_auth_header():
+    if not REGULAR_PASSWORD:
+        pytest.skip("Set NGINX_REGULAR_PASSWORD to run regular-user authorization tests.")
+    return get_auth_header(REGULAR_USERNAME, REGULAR_PASSWORD)
 
 test_counter = 0
 
@@ -168,7 +182,7 @@ class TestPredictionPositive:
         response = post(
             f"{API_URL}/predict", 
             json=TestData.VALID_PAYLOAD, 
-            headers=get_auth_header("andrey", "andrey")
+            headers=get_admin_auth_header()
         )
         assert response.status_code == 200
         print_result("PASS", f"HTTP {response.status_code}")
@@ -178,7 +192,7 @@ class TestPredictionPositive:
         response = post(
             f"{API_URL}/predict", 
             json=TestData.VALID_PAYLOAD, 
-            headers=get_auth_header("andrey", "andrey")
+            headers=get_admin_auth_header()
         )
         data = response.json()
         assert "prediction" in data
@@ -192,7 +206,7 @@ class TestPredictionPositive:
         response = post(
             f"{API_URL}/predict", 
             json=TestData.VALID_PAYLOAD, 
-            headers=get_auth_header("andrey", "andrey")
+            headers=get_admin_auth_header()
         )
         data = response.json()
         assert data["prediction"] in [0, 1]
@@ -205,7 +219,7 @@ class TestPredictionPositive:
         response = post(
             f"{API_URL}/predict", 
             json=payload, 
-            headers=get_auth_header("andrey", "andrey")
+            headers=get_admin_auth_header()
         )
         assert response.status_code == 200
         print_result("PASS", f"HTTP {response.status_code}")
@@ -223,7 +237,7 @@ class TestPredictionPositive:
         response = post(
             f"{API_URL}/predict", 
             json=payload, 
-            headers=get_auth_header("andrey", "andrey")
+            headers=get_admin_auth_header()
         )
         assert response.status_code == 200
         print_result("PASS", f"HTTP {response.status_code}")
@@ -239,7 +253,7 @@ class TestPredictionValidationErrors:
         response = post(
             f"{API_URL}/predict", 
             json=TestData.INVALID_HUMIDITY, 
-            headers=get_auth_header("andrey", "andrey")
+            headers=get_admin_auth_header()
         )
         assert response.status_code == 422
         print_result("PASS", f"HTTP {response.status_code}")
@@ -249,7 +263,7 @@ class TestPredictionValidationErrors:
         response = post(
             f"{API_URL}/predict", 
             json=TestData.INVALID_RAIN_TODAY, 
-            headers=get_auth_header("andrey", "andrey")
+            headers=get_admin_auth_header()
         )
         assert response.status_code == 422
         print_result("PASS", f"HTTP {response.status_code}")
@@ -259,7 +273,7 @@ class TestPredictionValidationErrors:
         response = post(
             f"{API_URL}/predict", 
             json=TestData.MISSING_FIELD, 
-            headers=get_auth_header("andrey", "andrey")
+            headers=get_admin_auth_header()
         )
         assert response.status_code == 422
         print_result("PASS", f"HTTP {response.status_code}")
@@ -269,7 +283,7 @@ class TestPredictionValidationErrors:
         response = post(
             f"{API_URL}/predict", 
             json={}, 
-            headers=get_auth_header("andrey", "andrey")
+            headers=get_admin_auth_header()
         )
         assert response.status_code == 422
         print_result("PASS", f"HTTP {response.status_code}")
@@ -279,7 +293,7 @@ class TestPredictionValidationErrors:
         response = post(
             f"{API_URL}/predict", 
             json=TestData.WRONG_DATA_TYPE, 
-            headers=get_auth_header("andrey", "andrey")
+            headers=get_admin_auth_header()
         )
         assert response.status_code == 422
         print_result("PASS", f"HTTP {response.status_code}")
@@ -289,7 +303,7 @@ class TestPredictionValidationErrors:
         response = post(
             f"{API_URL}/predict", 
             json=TestData.NEGATIVE_RAINFALL, 
-            headers=get_auth_header("andrey", "andrey")
+            headers=get_admin_auth_header()
         )
         assert response.status_code == 422
         print_result("PASS", f"HTTP {response.status_code}")
@@ -311,7 +325,7 @@ class TestAuthentication:
         response = post(
             f"{API_URL}/predict", 
             json=TestData.VALID_PAYLOAD, 
-            headers=get_auth_header("andrey", "wrongpassword")
+            headers=get_auth_header(ADMIN_USERNAME, "wrongpassword")
         )
         assert response.status_code == 401
         print_result("PASS", f"HTTP {response.status_code}")
@@ -330,7 +344,7 @@ class TestAuthentication:
         print_test_header("Security - User accessing /model/info", "HTTP 403 Forbidden")
         response = get(
             f"{API_URL}/model/info",
-            headers=get_auth_header("admin", "admin123")
+            headers=get_regular_auth_header()
         )
         assert response.status_code == 403
         print_result("PASS", f"HTTP {response.status_code}", "User correctly gets 403 Forbidden")
@@ -339,7 +353,7 @@ class TestAuthentication:
         print_test_header("Security - Admin accessing /model/info", "HTTP 200 OK")
         response = get(
             f"{API_URL}/model/info", 
-            headers=get_auth_header("andrey", "andrey")
+            headers=get_admin_auth_header()
         )
         assert response.status_code == 200
         print_result("PASS", f"HTTP {response.status_code}")
@@ -359,7 +373,7 @@ class TestMultipleLocations:
             response = post(
                 f"{API_URL}/predict", 
                 json=payload, 
-                headers=get_auth_header("andrey", "andrey")
+                headers=get_admin_auth_header()
             )
             if response.status_code != 200:
                 failed.append(location)
@@ -377,7 +391,7 @@ class TestBatchPrediction:
         response = post(
             f"{API_URL}/predict/batch", 
             json=TestData.BATCH_PAYLOAD, 
-            headers=get_auth_header("andrey", "andrey")
+            headers=get_admin_auth_header()
         )
         assert response.status_code == 200
         print_result("PASS", f"HTTP 200")
@@ -389,12 +403,12 @@ class TestConsistency:
         response1 = post(
             f"{API_URL}/predict", 
             json=TestData.VALID_PAYLOAD, 
-            headers=get_auth_header("andrey", "andrey")
+            headers=get_admin_auth_header()
         )
         response2 = post(
             f"{API_URL}/predict", 
             json=TestData.VALID_PAYLOAD, 
-            headers=get_auth_header("andrey", "andrey")
+            headers=get_admin_auth_header()
         )
         pred1 = response1.json()["prediction"]
         pred2 = response2.json()["prediction"]

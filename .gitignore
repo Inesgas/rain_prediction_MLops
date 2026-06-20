@@ -1,89 +1,35 @@
-# Python
+*.py[cod]
 __pycache__/
-*.pyc
-*.pyo
 .pytest_cache/
-.tox/
-.mypy_cache/
-*.so
-*.egg
-*.egg-info/
-dist/
-build/
-*.whl
-
-# Virtuelle Umgebungen
-venv/
-env/
-.venv/
-ENV/
-
-# IDEs / OS
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
-
-# Jupyter
 .ipynb_checkpoints/
-*.ipynb
-
-# DATA (GROSS – nur DVC)
-data/raw/
-data/processed/
-data/preprocessed/
-data/cleaned/
-*.csv
-
-# MODELS (GROSS – nur DVC)
-models/final_winner/*.joblib
-models/final_winner/*.pkl
-*.joblib
-*.pkl
-
-# MLflow (GROSS)
-mlflow/artifacts/
-mlflow/db/
-mlflow/*.db
-mlflow/*.db-journal
-
-# GRAFANA
-grafana/provisioning/dashboards/*.json
-grafana/provisioning/datasources/*.yml
-grafana/*.db
-
-# PROMETHEUS
-prometheus/*.db
-prometheus/*.log
-
-# DOCKER
-*.pid
-*.sock
-.dockerignore
-
-# LOGS
+.venv/
+venv/
 *.log
-logs/
+.env
+.DS_Store
 
-# ZERTIFIKATE / GEHEIMNISSE
+# Local runtime outputs
+data/cleaned/*
+!data/cleaned/.gitkeep
+data/incoming/
+models/tmp/
+reports/*
+!reports/monitoring_and_orchestration_work_report_2026_06_19_FINAL.docx
+!reports/figures/
+!reports/figures/.gitkeep
+!reports/versioning/
+reports/versioning/*
+!reports/versioning/.gitkeep
+
+# Local Airflow runtime state
+airflow/logs/
+airflow/airflow.cfg
+airflow/airflow.db
+airflow/standalone_admin_password.txt
+
+# Local secrets and certificates
 nginx/certs/*.crt
 nginx/certs/*.key
 .env
 .env.local
 .env.*.local
-
-# DVC – NUR den Cache ignorieren, nicht .dvc selbst!
-.dvc/cache/
-.dvc/tmp/
-
-# TESTS / COVERAGE
-.coverage
-htmlcov/
-.pytest_cache/
-
-# SONSTIGES
-*.tmp
-*.temp

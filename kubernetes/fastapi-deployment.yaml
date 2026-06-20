@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rain-prediction-api
+  namespace: rain-prediction
+  labels:
+    app: rain-prediction-api
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: rain-prediction-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: rain-prediction-api
+    spec:
+      containers:
+        - name: fastapi
+          image: rain_prediction_mlops-fastapi:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8502
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8502
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8502
+            initialDelaySeconds: 45
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

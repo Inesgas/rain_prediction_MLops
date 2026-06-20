@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   prediction:
     build:
@@ -7,11 +5,26 @@ services:
       dockerfile: src/docker/prediction/prediction.Dockerfile
     image: rain-prediction-api:winner
     container_name: rain_prediction_api
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
+    environment:
+      - PREDICTION_API_CORS_ORIGINS=${PREDICTION_API_CORS_ORIGINS:-http://localhost:8501,http://127.0.0.1:8501}
+      - PREDICTION_API_MAX_REQUEST_BYTES=${PREDICTION_API_MAX_REQUEST_BYTES:-65536}
+      - PREDICTION_API_WORKERS=${PREDICTION_API_WORKERS:-1}
     volumes:
-      - ../../src:/app/src
-      - ../../models:/app/models
+      - ../../src:/app/src:ro
+      - ../../models:/app/models:ro
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: src/docker/gateway/gateway.Dockerfile
+    image: rain-prediction-gateway:local
+    container_name: rain_prediction_gateway
+    ports:
+      - "8000:80"
+    depends_on:
+      - prediction
 
   training:
     build:
@@ -25,6 +38,46 @@ services:
       - ../../models:/app/models
       - ../../references:/app/references
 
+  airflow:
+    build:
+      context: ../..
+      dockerfile: src/docker/airflow/airflow.Dockerfile
+    image: rain-prediction-airflow:local
+    container_name: rain_prediction_airflow
+    ports:
+      - "8080:8080"
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
+      - AIRFLOW_PROJECT_DIR=/opt/airflow/project
+      - PYTHONPATH=/opt/airflow/project
+      - MLOPS_E2E_SCHEDULE=${MLOPS_E2E_SCHEDULE:-}
+      - WEATHER_AUS_SOURCE=${WEATHER_AUS_SOURCE:-}
+      - WEATHER_AUS_SOURCE_URL=${WEATHER_AUS_SOURCE_URL:-}
+      - WEATHER_AUS_SOURCE_SHA256=${WEATHER_AUS_SOURCE_SHA256:-}
+      - WEATHER_AUS_KAGGLE_DATASET=${WEATHER_AUS_KAGGLE_DATASET:-}
+      - WEATHER_AUS_KAGGLE_FILE=${WEATHER_AUS_KAGGLE_FILE:-weatherAUS.csv}
+      - WEATHER_AUS_DAILY_PROVIDER=${WEATHER_AUS_DAILY_PROVIDER:-}
+      - WEATHER_AUS_DAILY_START_DATE=${WEATHER_AUS_DAILY_START_DATE:-}
+      - WEATHER_AUS_DAILY_END_DATE=${WEATHER_AUS_DAILY_END_DATE:-}
+      - WEATHER_AUS_DAILY_DAYS_BACK=${WEATHER_AUS_DAILY_DAYS_BACK:-7}
+      - WEATHER_AUS_DAILY_END_LAG_DAYS=${WEATHER_AUS_DAILY_END_LAG_DAYS:-1}
+      - WEATHER_AUS_OPEN_METEO_OUTPUT=${WEATHER_AUS_OPEN_METEO_OUTPUT:-/opt/airflow/project/data/incoming/open_meteo_weatherAUS_daily.csv}
+      - OPEN_METEO_ARCHIVE_URL=${OPEN_METEO_ARCHIVE_URL:-https://archive-api.open-meteo.com/v1/archive}
+      - WEATHER_AUS_SOURCE_MIN_ROWS=${WEATHER_AUS_SOURCE_MIN_ROWS:-1}
+      - WEATHER_AUS_EXTRACT_MODE=${WEATHER_AUS_EXTRACT_MODE:-upsert}
+      - KAGGLE_USERNAME=${KAGGLE_USERNAME:-}
+      - KAGGLE_KEY=${KAGGLE_KEY:-}
+      - _AIRFLOW_WWW_USER_CREATE=true
+      - _AIRFLOW_WWW_USER_USERNAME=airflow
+      - _AIRFLOW_WWW_USER_PASSWORD=airflow
+    volumes:
+      - ../..:/opt/airflow/project
+      - ../../airflow/dags:/opt/airflow/dags
+      - ../../airflow/logs:/opt/airflow/logs
+    command: standalone
+
   dashboard:
     build:
       context: ../..
@@ -34,8 +87,8 @@ services:
     ports:
       - "8501:8501"
     environment:
-      - API_URL=http://prediction:8000
+      - API_URL=http://gateway
     volumes:
       - ../../src:/app/src
     depends_on:
-      - prediction
+      - gateway
