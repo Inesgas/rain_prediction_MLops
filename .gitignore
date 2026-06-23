@@ -31,14 +31,13 @@ Thumbs.db
 .ipynb_checkpoints/
 *.ipynb
 
-# DATA (GROSS – nur DVC)
-data/raw/
-data/processed/
-data/preprocessed/
-data/cleaned/
-*.csv
+# DATA (GROSS – nur DVC) - 23.06.26 ingore only csv data and not .dvc-pointer, gitignore, subfolders - *.csv maybe ignore versioned files
+data/raw/*.csv
+data/processed/*.csv
+data/preprocessed/*.csv
+data/cleaned/*.csv
 
-# MODELS (GROSS – nur DVC)
+# MODELS (GROSS – nur DVC) 
 models/final_winner/*.joblib
 models/final_winner/*.pkl
 *.joblib
