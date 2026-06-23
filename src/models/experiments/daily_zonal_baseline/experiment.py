@@ -19,6 +19,12 @@ from src.models.ines_feature_modeling import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 DATA_PATH = PROJECT_ROOT / "data" / "raw" / "weatherAUS.csv"
+
+# src/features/build_features.py and src/features/feature_pipeline.py  
+# uses data/preprocessed/locations_metadata.csv 
+# rc/models/experiments/daily_zonal_baseline/experiment.py  uses "...processed"
+# I made a copy of hte locations_metadata.csv file 
+ 
 BASE_METADATA_PATH = PROJECT_ROOT / "data" / "processed" / "locations_metadata.csv"
 RESULTS_DIR = PROJECT_ROOT / "reports" / "model_evidence" / "daily_zonal_baseline"
 METADATA_PATH = PROJECT_ROOT / "data" / "processed" / "daily_zonal_locations_metadata.csv"
