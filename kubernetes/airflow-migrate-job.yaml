@@ -1,0 +1,98 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: airflow-migrate
+  namespace: rain-prediction
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: rain-prediction-airflow
+        component: migrate
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - until pg_isready -h airflow-postgres -p 5432 -U "$POSTGRES_USER"; do sleep 5; done
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-secret
+                  key: AIRFLOW_DB_USER
+        - name: seed-project-workspace
+          image: rain_prediction_mlops-airflow:production-dvc
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -e
+              mkdir -p /opt/airflow/project /opt/airflow/logs
+              chown -R 50000:0 /opt/airflow/project /opt/airflow/logs
+              chmod -R g+rwX /opt/airflow/project /opt/airflow/logs
+              if [ ! -f /opt/airflow/project/.project_seeded ]; then
+                cp -a /opt/airflow/project-seed/. /opt/airflow/project/
+                touch /opt/airflow/project/.project_seeded
+              fi
+              if [ ! -f /opt/airflow/project/.dvc/config ]; then
+                mkdir -p /opt/airflow/project/.dvc
+                cp -a /opt/airflow/project-seed/.dvc/. /opt/airflow/project/.dvc/
+                cp -a /opt/airflow/project-seed/.dvcignore /opt/airflow/project/.dvcignore
+                cp -a /opt/airflow/project-seed/.gitignore /opt/airflow/project/.gitignore
+              fi
+              while ! mkdir /opt/airflow/project/.dvc_config_lock 2>/dev/null; do sleep 1; done
+              trap 'rmdir /opt/airflow/project/.dvc_config_lock' EXIT
+              sed -i '/^[[:space:]]*no_scm[[:space:]]*=/d' /opt/airflow/project/.dvc/config
+              sed -i '/^\[core\]/a\    no_scm = true' /opt/airflow/project/.dvc/config
+              rmdir /opt/airflow/project/.dvc_config_lock
+              trap - EXIT
+              chown -R 50000:0 /opt/airflow/project
+              chmod -R g+rwX /opt/airflow/project
+          volumeMounts:
+            - name: airflow-project
+              mountPath: /opt/airflow/project
+            - name: airflow-logs
+              mountPath: /opt/airflow/logs
+      containers:
+        - name: migrate
+          image: rain_prediction_mlops-airflow:production-dvc
+          imagePullPolicy: IfNotPresent
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -e
+              airflow db migrate
+              airflow users create \
+                -u "$AIRFLOW_ADMIN_USER" \
+                -p "$AIRFLOW_ADMIN_PASSWORD" \
+                -f Admin \
+                -l User \
+                -r Admin \
+                -e "$AIRFLOW_ADMIN_EMAIL" \
+              || airflow users reset-password \
+                -u "$AIRFLOW_ADMIN_USER" \
+                -p "$AIRFLOW_ADMIN_PASSWORD"
+          envFrom:
+            - configMapRef:
+                name: airflow-config
+            - secretRef:
+                name: airflow-secret
+          volumeMounts:
+            - name: airflow-project
+              mountPath: /opt/airflow/project
+            - name: airflow-logs
+              mountPath: /opt/airflow/logs
+      volumes:
+        - name: airflow-project
+          persistentVolumeClaim:
+            claimName: airflow-project
+        - name: airflow-logs
+          persistentVolumeClaim:
+            claimName: airflow-logs

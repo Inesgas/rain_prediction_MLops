@@ -1,194 +1,237 @@
 {
-  "dashboard": {
-    "title": "Rain Prediction MLOps Dashboard",
-    "tags": ["mlops", "fastapi", "rain-prediction"],
-    "timezone": "browser",
-    "panels": [
-      {
-        "title": "Predictions per Location",
-        "type": "barchart",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
-        "targets": [
-          {
-            "expr": "sum(rain_predictions_total) by (location)",
-            "legendFormat": "{{location}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "short",
-            "color": {"mode": "palette-classic"}
+  "title": "Rain Prediction MLOps Dashboard",
+  "uid": "rain-prediction-mlops",
+  "tags": ["mlops", "fastapi", "rain-prediction"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "10s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "title": "Total Predictions",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "sum(rain_predictions_total)",
+          "legendFormat": "predictions",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null}
+            ]
           }
         }
       },
-      {
-        "title": "Predictions over Time",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
-        "targets": [
-          {
-            "expr": "sum(rate(rain_predictions_total[1h])) by (location)",
-            "legendFormat": "{{location}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "cps",
-            "custom": {"lineInterpolation": "smooth"}
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "title": "Latest Confidence",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "targets": [
+        {
+          "expr": "rain_latest_confidence",
+          "legendFormat": "confidence",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 0.6},
+              {"color": "green", "value": 0.8}
+            ]
           }
         }
       },
-      {
-        "title": "Prediction Confidence (95th Percentile)",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
-        "targets": [
-          {
-            "expr": "histogram_quantile(0.95, sum(rate(rain_prediction_confidence_bucket[5m])) by (le))",
-            "legendFormat": "95th Percentile",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "percentunit",
-            "custom": {"lineInterpolation": "smooth"}
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "title": "Prediction Errors",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "sum(rain_prediction_errors_total)",
+          "legendFormat": "errors",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
           }
         }
       },
-      {
-        "title": "Confidence Distribution",
-        "type": "histogram",
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
-        "targets": [
-          {
-            "expr": "sum(rate(rain_prediction_confidence_bucket[5m])) by (le)",
-            "legendFormat": "le={{le}}",
-            "refId": "A"
-          }
-        ]
-      },
-      {
-        "title": "Input Humidity per Location (Data Drift)",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
-        "targets": [
-          {
-            "expr": "avg(rain_input_humidity) by (location)",
-            "legendFormat": "{{location}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "percent",
-            "custom": {"lineInterpolation": "smooth"}
-          }
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "title": "FastAPI Scrape Status",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0},
+      "targets": [
+        {
+          "expr": "up{job=\"fastapi\"}",
+          "legendFormat": "fastapi",
+          "refId": "A"
         }
-      },
-      {
-        "title": "Input Pressure per Location",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
-        "targets": [
-          {
-            "expr": "avg(rain_input_pressure) by (location)",
-            "legendFormat": "{{location}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "hPa",
-            "custom": {"lineInterpolation": "smooth"}
-          }
-        }
-      },
-      {
-        "title": "HTTP Requests per Endpoint",
-        "type": "barchart",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
-        "targets": [
-          {
-            "expr": "sum(rate(http_requests_total[1h])) by (handler)",
-            "legendFormat": "{{handler}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "cps"
-          }
-        }
-      },
-      {
-        "title": "HTTP Error Rate (5xx)",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
-        "targets": [
-          {
-            "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))",
-            "legendFormat": "Error Rate",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "percentunit",
-            "custom": {"lineInterpolation": "smooth"}
-          }
-        }
-      },
-      {
-        "title": "Model Load Time",
-        "type": "stat",
-        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 32},
-        "targets": [
-          {
-            "expr": "rain_model_load_time_seconds",
-            "legendFormat": "Load Time",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "s",
-            "thresholds": {
-              "steps": [
-                {"color": "green", "value": null},
-                {"color": "yellow", "value": 5},
-                {"color": "red", "value": 10}
-              ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            {
+              "options": {
+                "0": {"text": "DOWN"},
+                "1": {"text": "UP"}
+              },
+              "type": "value"
             }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
           }
         }
       },
-      {
-        "title": "Prediction Errors",
-        "type": "stat",
-        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 32},
-        "targets": [
-          {
-            "expr": "sum(rain_prediction_errors_total)",
-            "legendFormat": "Errors",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "short",
-            "thresholds": {
-              "steps": [
-                {"color": "green", "value": null},
-                {"color": "red", "value": 1}
-              ]
-            }
-          }
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value"
+      }
+    },
+    {
+      "title": "Predictions by City",
+      "type": "barchart",
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 5},
+      "targets": [
+        {
+          "expr": "sum(rain_predictions_total) by (location)",
+          "legendFormat": "{{location}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "orientation": "horizontal"
+      }
+    },
+    {
+      "title": "Rain vs No Rain",
+      "type": "barchart",
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 5},
+      "targets": [
+        {
+          "expr": "sum(rain_predictions_total) by (rain_tomorrow)",
+          "legendFormat": "{{rain_tomorrow}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "palette-classic"}
         }
       }
-    ]
-  },
-  "overwrite": false
+    },
+    {
+      "title": "Prediction Confidence Over Time",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+      "targets": [
+        {
+          "expr": "rain_latest_confidence",
+          "legendFormat": "latest confidence",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(rain_prediction_confidence_bucket[5m])) by (le))",
+          "legendFormat": "p95 confidence",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {"lineInterpolation": "smooth"}
+        }
+      }
+    },
+    {
+      "title": "Incoming Weather Values",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+      "targets": [
+        {
+          "expr": "avg(rain_input_humidity) by (location)",
+          "legendFormat": "humidity {{location}}",
+          "refId": "A"
+        },
+        {
+          "expr": "avg(rain_input_rainfall) by (location)",
+          "legendFormat": "rainfall {{location}}",
+          "refId": "B"
+        },
+        {
+          "expr": "avg(rain_input_pressure) by (location)",
+          "legendFormat": "pressure {{location}}",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"lineInterpolation": "smooth"}
+        }
+      }
+    }
+  ]
 }

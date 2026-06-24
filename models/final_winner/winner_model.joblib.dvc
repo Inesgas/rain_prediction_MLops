@@ -3,3 +3,4 @@ outs:
   size: 1729777
   hash: md5
   path: winner_model.joblib
+  isexec: true

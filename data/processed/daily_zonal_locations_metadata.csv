@@ -1,0 +1,50 @@
+location,site_id,elevation,lat,lon,rainfall_zone
+Adelaide,23034,2.0,-34.9524,138.5196,Winter
+Albany,9500,3.0,-35.0289,117.8808,Winter dominant
+Albury,72160,163.5,-36.0662,146.953,Uniform
+AliceSprings,15590,546.0,-23.7951,133.889,Arid
+BadgerysCreek,67108,81.2,-33.8969,150.7281,Uniform
+Ballarat,89002,435.2,-37.5127,143.7911,Winter
+Bendigo,81123,209.2,-36.7411,144.3274,Uniform
+Brisbane,40842,4.5,-27.3917,153.1292,Summer
+Cairns,31011,2.2,-16.8736,145.7458,Summer dominant
+Canberra,70351,577.1,-35.3106,149.197,Uniform
+Cobar,48237,218.0,-31.5388,145.7964,Arid
+CoffsHarbour,59040,5.0,-30.3107,153.1187,Uniform
+Dartmoor,90194,51.0,-37.9222,141.2614,Winter
+Darwin,14015,30.4,-12.4239,130.8925,Summer dominant
+GoldCoast,40764,3.0,-27.939,153.4283,Summer
+Hobart,94008,4.0,-42.8339,147.5033,Winter
+Katherine,14932,133.6,-14.5229,132.3826,Summer dominant
+Launceston,91311,166.9,-41.5476,147.2156,Winter
+Melbourne,86338,7.5,-37.8255,144.9816,Uniform
+MelbourneAirport,86282,113.4,-37.6654,144.8329,Uniform
+Mildura,76031,50.0,-34.2358,142.0867,Arid
+Moree,53115,213.0,-29.4898,149.8471,Summer
+MountGambier,26021,63.0,-37.7473,140.7739,Winter
+MountGinini,70349,1760.0,-35.5293,148.7721,Winter
+Newcastle,61055,33.0,-32.9184,151.7985,Uniform
+Nhil,78015,138.9,-36.3093,141.6486,Winter
+NorahHead,61366,18.8,-33.2814,151.5766,Uniform
+NorfolkIsland,200288,111.7,-29.0389,167.9408,Summer
+Nuriootpa,23373,275.0,-34.4761,139.0056,Winter
+PearceRAAF,9053,40.0,-31.6669,116.0189,Winter dominant
+Penrith,67113,24.7,-33.7195,150.6783,Uniform
+Perth,9225,24.9,-31.9192,115.8728,Winter dominant
+PerthAirport,9021,15.4,-31.9275,115.9764,Winter dominant
+Portland,90171,80.9,-38.3148,141.4705,Winter
+Richmond,67105,19.0,-33.6004,150.7761,Uniform
+Sale,85072,4.6,-38.1156,147.1323,Uniform
+SalmonGums,12071,249.0,-32.9869,121.6239,Winter
+Sydney,66214,43.4,-33.8593,151.2048,Uniform
+SydneyAirport,66037,6.0,-33.9465,151.1731,Uniform
+Townsville,32040,4.3,-19.2483,146.7661,Summer dominant
+Tuggeranong,70339,586.7,-35.4184,149.0937,Uniform
+Uluru,15635,492.0,-25.1896,130.9737,Arid
+WaggaWagga,72150,212.0,-35.1583,147.4575,Uniform
+Walpole,9998,73.0,-34.9469,116.7222,Winter dominant
+Watsonia,86068,66.1,-37.7408,145.0972,Uniform
+Williamtown,61078,7.5,-32.7939,151.8364,Uniform
+Witchcliffe,109521,84.5,-34.0258,115.0637,Winter dominant
+Wollongong,68219,449.0,-34.2625,150.8752,Uniform
+Woomera,16001,166.6,-31.1558,136.8054,Arid
