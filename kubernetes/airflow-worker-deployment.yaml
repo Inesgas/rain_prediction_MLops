@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rain-prediction-airflow-worker
+  namespace: rain-prediction
+  labels:
+    app: rain-prediction-airflow
+    component: worker
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: rain-prediction-airflow
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: rain-prediction-airflow
+        component: worker
+    spec:
+      terminationGracePeriodSeconds: 1800
+      initContainers:
+        - name: seed-project-workspace
+          image: rain_prediction_mlops-airflow:production-dvc
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -e
+              mkdir -p /opt/airflow/project /opt/airflow/logs
+              chown -R 50000:0 /opt/airflow/project /opt/airflow/logs
+              chmod -R g+rwX /opt/airflow/project /opt/airflow/logs
+              if [ ! -f /opt/airflow/project/.project_seeded ]; then
+                cp -a /opt/airflow/project-seed/. /opt/airflow/project/
+                touch /opt/airflow/project/.project_seeded
+              fi
+              if [ ! -f /opt/airflow/project/.dvc/config ]; then
+                mkdir -p /opt/airflow/project/.dvc
+                cp -a /opt/airflow/project-seed/.dvc/. /opt/airflow/project/.dvc/
+                cp -a /opt/airflow/project-seed/.dvcignore /opt/airflow/project/.dvcignore
+                cp -a /opt/airflow/project-seed/.gitignore /opt/airflow/project/.gitignore
+              fi
+              while ! mkdir /opt/airflow/project/.dvc_config_lock 2>/dev/null; do sleep 1; done
+              trap 'rmdir /opt/airflow/project/.dvc_config_lock' EXIT
+              sed -i '/^[[:space:]]*no_scm[[:space:]]*=/d' /opt/airflow/project/.dvc/config
+              sed -i '/^\[core\]/a\    no_scm = true' /opt/airflow/project/.dvc/config
+              rmdir /opt/airflow/project/.dvc_config_lock
+              trap - EXIT
+              chown -R 50000:0 /opt/airflow/project
+              chmod -R g+rwX /opt/airflow/project
+          volumeMounts:
+            - name: airflow-project
+              mountPath: /opt/airflow/project
+            - name: airflow-logs
+              mountPath: /opt/airflow/logs
+        - name: wait-for-migrations
+          image: rain_prediction_mlops-airflow:production-dvc
+          imagePullPolicy: IfNotPresent
+          command: ["bash", "-c"]
+          args:
+            - airflow db check-migrations --migration-wait-timeout 180
+          envFrom:
+            - configMapRef:
+                name: airflow-config
+            - secretRef:
+                name: airflow-secret
+      containers:
+        - name: worker
+          image: rain_prediction_mlops-airflow:production-dvc
+          imagePullPolicy: IfNotPresent
+          command: ["bash", "-c"]
+          args:
+            - exec airflow celery worker
+          envFrom:
+            - configMapRef:
+                name: airflow-config
+            - secretRef:
+                name: airflow-secret
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - import socket; socket.create_connection(("127.0.0.1", 8793), 5).close()
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            timeoutSeconds: 10
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 3Gi
+          volumeMounts:
+            - name: airflow-project
+              mountPath: /opt/airflow/project
+            - name: airflow-logs
+              mountPath: /opt/airflow/logs
+      volumes:
+        - name: airflow-project
+          persistentVolumeClaim:
+            claimName: airflow-project
+        - name: airflow-logs
+          persistentVolumeClaim:
+            claimName: airflow-logs

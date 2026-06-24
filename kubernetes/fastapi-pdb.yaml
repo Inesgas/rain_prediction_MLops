@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rain-prediction-api
+  namespace: rain-prediction
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: rain-prediction-api

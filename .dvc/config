@@ -1,2 +1,5 @@
-['remote "origin"']
+[core]
+    remote = dagshub
+    analytics = false
+['remote "dagshub"']
     url = https://dagshub.com/Inesgas/rain_prediction_MLops.dvc

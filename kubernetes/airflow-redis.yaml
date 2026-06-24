@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-redis
+  namespace: rain-prediction
+spec:
+  selector:
+    app: airflow-redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: airflow-redis
+  namespace: rain-prediction
+spec:
+  serviceName: airflow-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-redis
+  template:
+    metadata:
+      labels:
+        app: airflow-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - exec redis-server --appendonly yes --requirepass "$AIRFLOW_REDIS_PASSWORD"
+          ports:
+            - containerPort: 6379
+              name: redis
+          env:
+            - name: AIRFLOW_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-secret
+                  key: AIRFLOW_REDIS_PASSWORD
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli -a "$AIRFLOW_REDIS_PASSWORD" ping | grep PONG
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli -a "$AIRFLOW_REDIS_PASSWORD" ping | grep PONG
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi

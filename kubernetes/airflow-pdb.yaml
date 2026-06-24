@@ -1,0 +1,35 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rain-prediction-airflow-webserver
+  namespace: rain-prediction
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: rain-prediction-airflow
+      component: webserver
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rain-prediction-airflow-scheduler
+  namespace: rain-prediction
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: rain-prediction-airflow
+      component: scheduler
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rain-prediction-airflow-worker
+  namespace: rain-prediction
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: rain-prediction-airflow
+      component: worker
