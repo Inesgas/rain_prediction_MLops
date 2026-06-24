@@ -1,6 +1,6 @@
 outs:
-- md5: 4f1d31c9fe16ad9b8f44e71355337813
-  size: 1709608
+- md5: 2609ccf0516fa9640c6e859cd5fa1739
+  size: 1729777
   hash: md5
   path: winner_model.joblib
   isexec: true

@@ -222,18 +222,18 @@
     "random_strength": 0.31203728088487304
   },
   "metrics": {
-    "roc_auc": 0.898828705593119,
-    "accuracy": 0.8444199523589434,
-    "f1": 0.6821615339918652,
-    "precision": 0.6242190615445966,
-    "recall": 0.7519615692554044,
+    "roc_auc": 0.9018884851879131,
+    "accuracy": 0.8477928360544944,
+    "f1": 0.6851129590109648,
+    "precision": 0.6306733504945129,
+    "recall": 0.7498389175257731,
     "threshold": 0.5800000000000003,
     "train_rows": 112628,
     "test_rows": 28127,
     "test_start_date": "2015-11-16",
     "test_end_date": "2026-06-16"
   },
-  "created_at_utc": "2026-06-18T19:23:50.304829+00:00",
+  "created_at_utc": "2026-06-23T13:19:59.345625+00:00",
   "artifact_path": "models/final_winner/winner_model.joblib",
   "config_path": "models/final_winner/model_config.json"
 }

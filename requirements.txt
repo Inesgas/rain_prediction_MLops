@@ -13,6 +13,10 @@ ipykernel==7.2.0
 xarray==2026.2.0
 netCDF4==1.7.4
 dvc==3.67.1
+
+# problems with pandas 3.0.1 -> mlflow needs pandas <3 -> solution mlflow-skinny without mlflow.evaluate()/ dataset-profiling...
+mlflow-skinny==3.14.0
+
 fastapi==0.115.0
 uvicorn==0.34.0
 pydantic==2.10.0

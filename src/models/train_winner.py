@@ -6,7 +6,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+#update mlflow to 2.9.1 to avoid the error: AttributeError: module 'mlflow' has no attribute 'catboost'
 import joblib
+import mlflow
+import mlflow.catboost
 import pandas as pd
 
 from src.config.paths import (
@@ -77,22 +80,37 @@ def train_winner(
     model = make_catboost_classifier(y_train, params=params)
     if model is None:
         raise RuntimeError("CatBoost is not available in this environment.")
-    model.fit(X_train_ready, y_train, cat_features=categorical_features)
 
-    probabilities = model.predict_proba(X_test_ready)[:, 1]
-    metrics = {
-        key: float(value)
-        for key, value in score_predictions(y_test, probabilities, threshold=threshold).items()
-    }
-    metrics.update(
-        {
-            "threshold": threshold,
-            "train_rows": int(len(X_train)),
-            "test_rows": int(len(X_test)),
-            "test_start_date": pd.to_datetime(test_df[DATE_COLUMN]).min().date().isoformat(),
-            "test_end_date": pd.to_datetime(test_df[DATE_COLUMN]).max().date().isoformat(),
+    mlflow.set_experiment("rain_prediction_winner")
+    with mlflow.start_run(run_name=config.get("model_name", "final_hybrid_catboost")):
+        model.fit(X_train_ready, y_train, cat_features=categorical_features)
+
+        probabilities = model.predict_proba(X_test_ready)[:, 1]
+        metrics = {
+            key: float(value)
+            for key, value in score_predictions(y_test, probabilities, threshold=threshold).items()
         }
-    )
+        metrics.update(
+            {
+                "threshold": threshold,
+                "train_rows": int(len(X_train)),
+                "test_rows": int(len(X_test)),
+                "test_start_date": pd.to_datetime(test_df[DATE_COLUMN]).min().date().isoformat(),
+                "test_end_date": pd.to_datetime(test_df[DATE_COLUMN]).max().date().isoformat(),
+            }
+        )
+
+        mlflow.log_params(params)
+        mlflow.log_param("threshold", threshold)
+        mlflow.log_param("feature_set_name", config.get("feature_set_name", ""))
+        date_fields = {"test_start_date", "test_end_date"}
+        numeric_metrics = {k: v for k, v in metrics.items() if k not in date_fields}
+        mlflow.log_metrics(numeric_metrics)
+        mlflow.log_params({k: metrics[k] for k in date_fields})
+        mlflow.catboost.log_model(model, artifact_path="model")
+        
+        
+        
 
     output_dir.mkdir(parents=True, exist_ok=True)
     artifact = {
