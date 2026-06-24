@@ -26,6 +26,7 @@ DATA_PATH = PROJECT_ROOT / "data" / "raw" / "weatherAUS.csv"
 # I made a copy of hte locations_metadata.csv file 
  
 BASE_METADATA_PATH = PROJECT_ROOT / "data" / "processed" / "locations_metadata.csv"
+PREPROCESSED_METADATA_PATH = PROJECT_ROOT / "data" / "preprocessed" / "locations_metadata.csv"
 RESULTS_DIR = PROJECT_ROOT / "reports" / "model_evidence" / "daily_zonal_baseline"
 METADATA_PATH = PROJECT_ROOT / "data" / "processed" / "daily_zonal_locations_metadata.csv"
 SEARCH_RESULTS_PATH = RESULTS_DIR / "daily_zonal_results.csv"
@@ -132,7 +133,8 @@ def chronological_split(df: pd.DataFrame, test_size: float = 0.20) -> tuple[pd.D
 
 def enrich_metadata_with_rainfall_zone() -> Path:
     METADATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-    meta = pd.read_csv(BASE_METADATA_PATH)
+    source_path = BASE_METADATA_PATH if BASE_METADATA_PATH.exists() else PREPROCESSED_METADATA_PATH
+    meta = pd.read_csv(source_path)
     if "rainfall_zone" in meta.columns:
         meta.to_csv(METADATA_PATH, index=False)
         return METADATA_PATH

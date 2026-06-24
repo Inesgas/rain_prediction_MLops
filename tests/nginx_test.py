@@ -7,6 +7,7 @@ import requests
 import time
 import base64
 import statistics
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ============================================================================
@@ -15,6 +16,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 API_URL = "https://localhost"
 VERIFY_SSL = False
+ADMIN_USERNAME = os.getenv("NGINX_ADMIN_USER")
+ADMIN_PASSWORD = os.getenv("NGINX_ADMIN_PASSWORD")
 
 # Nginx rate limit: 100 requests per minute + burst 20
 RATE_LIMIT = 100
@@ -23,7 +26,9 @@ EXPECTED_SUCCESS_MAX = RATE_LIMIT + BURST  # 120
 
 def get_auth_header():
     """Generates the Basic Auth header for your Nginx."""
-    credentials = f"andrey:andrey"
+    if not ADMIN_USERNAME or not ADMIN_PASSWORD:
+        raise RuntimeError("Set NGINX_ADMIN_USER and NGINX_ADMIN_PASSWORD before running this Nginx rate-limit test.")
+    credentials = f"{ADMIN_USERNAME}:{ADMIN_PASSWORD}"
     encoded = base64.b64encode(credentials.encode()).decode()
     return {"Authorization": f"Basic {encoded}", "Content-Type": "application/json"}
 

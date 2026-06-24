@@ -14,6 +14,25 @@ services:
       timeout: 10s
       retries: 3
 
+  prediction-traffic:
+    image: python:3.12-slim
+    container_name: prediction-traffic
+    restart: unless-stopped
+    working_dir: /app
+    command: ["python", "generate_prediction_traffic.py"]
+    environment:
+      PREDICTION_API_URL: http://fastapi:8502/predict
+      PREDICTION_BATCH_API_URL: http://fastapi:8502/predict/batch
+      PREDICTION_HEALTH_URL: http://fastapi:8502/health
+      PREDICTION_LOCATIONS_URL: http://fastapi:8502/locations
+      PREDICTION_TRAFFIC_INTERVAL_SECONDS: "60"
+      PREDICTION_TRAFFIC_USER: ines
+    volumes:
+      - ./docker/traffic-generator:/app:ro
+    depends_on:
+      fastapi:
+        condition: service_healthy
+
   nginx:
     build:
       context: .
@@ -56,6 +75,7 @@ services:
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_SECURITY_ADMIN_USER=admin
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/dashboards/rain_prediction_dashboard.json
 
   node-exporter:
     image: prom/node-exporter:latest
@@ -64,6 +84,41 @@ services:
     expose:
       - "9100"
 
+  airflow:
+    build:
+      context: .
+      dockerfile: docker/airflow/airflow.Dockerfile
+    container_name: airflow
+    command: >
+      bash -c "
+        set -e;
+        airflow db migrate;
+        airflow users create -u admin -p airflow -f Admin -l User -r Admin -e admin@example.com ||
+        airflow users reset-password -u admin -p airflow;
+        airflow scheduler &
+        exec airflow webserver
+      "
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      AIRFLOW_PROJECT_DIR: /opt/airflow/project
+      MLOPS_E2E_SCHEDULE: ""
+      _AIRFLOW_WWW_USER_USERNAME: admin
+      _AIRFLOW_WWW_USER_PASSWORD: airflow
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./:/opt/airflow/project
+      - airflow_logs:/opt/airflow/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
 volumes:
   prometheus_data:
   grafana_data:
+  airflow_logs:

@@ -8,6 +8,7 @@ import time
 import random
 import base64
 import argparse
+import os
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
@@ -17,6 +18,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 API_URL = "https://localhost"
 VERIFY_SSL = False
+ADMIN_USERNAME = os.getenv("NGINX_ADMIN_USER")
+ADMIN_PASSWORD = os.getenv("NGINX_ADMIN_PASSWORD")
 
 # Complete list of 54 supported locations
 ALL_LOCATIONS = [
@@ -43,8 +46,12 @@ TEST_SCENARIOS = [
     {"name": "unauthenticated", "weight": 10}      # Without auth (should fail)
 ]
 
-def get_auth_header(username="andrey", password="andrey"):
+def get_auth_header(username=None, password=None):
     """Generates Basic Auth header."""
+    username = username or ADMIN_USERNAME
+    password = password or ADMIN_PASSWORD
+    if not username or not password:
+        raise RuntimeError("Set NGINX_ADMIN_USER and NGINX_ADMIN_PASSWORD before running this Nginx/Grafana traffic script.")
     credentials = f"{username}:{password}"
     encoded = base64.b64encode(credentials.encode()).decode()
     return {"Authorization": f"Basic {encoded}", "Content-Type": "application/json"}

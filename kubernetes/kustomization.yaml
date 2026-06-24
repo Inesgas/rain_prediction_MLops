@@ -1,0 +1,18 @@
+resources:
+  - namespace.yaml
+  - airflow-secret.yaml
+  - airflow-configmap.yaml
+  - airflow-pvc.yaml
+  - airflow-postgres.yaml
+  - airflow-redis.yaml
+  - airflow-migrate-job.yaml
+  - fastapi-deployment.yaml
+  - fastapi-service.yaml
+  - fastapi-hpa.yaml
+  - fastapi-pdb.yaml
+  - airflow-deployment.yaml
+  - airflow-scheduler-deployment.yaml
+  - airflow-worker-deployment.yaml
+  - airflow-worker-hpa.yaml
+  - airflow-pdb.yaml
+  - airflow-service.yaml
