@@ -1,5 +1,5 @@
 outs:
-- md5: ca021f7c366475a1b0ae86d2822d430a
+- md5: b1bb979c69bcc1afc74ff397f009f95a
   size: 1712312
   hash: md5
   path: winner_model.joblib
