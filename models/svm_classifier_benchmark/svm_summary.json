@@ -1,0 +1,30 @@
+{
+  "experiment": "svm_classifier_benchmark",
+  "model": "Linear SVM",
+  "selection_basis": "validation_first_chronological_split",
+  "feature_set_name": "hybrid_regime_keep_location_plus_core",
+  "candidate_count": 4,
+  "best_result": {
+    "candidate": "svm_keep_location_c05",
+    "candidate_label": "svm keep location c05",
+    "model": "Linear SVM",
+    "drop_location": false,
+    "C": 0.5,
+    "train_support": 90295,
+    "validation_support": 22571,
+    "test_support": 28187,
+    "feature_count": 68,
+    "validation_threshold": 0.5200000000000002,
+    "validation_f1": 0.6384108565247321,
+    "validation_roc_auc": 0.8856730484707557,
+    "validation_precision": 0.5857091302778781,
+    "validation_recall": 0.7015344715798574,
+    "test_roc_auc": 0.8773528421964222,
+    "test_f1": 0.647473971071204,
+    "test_precision": 0.5786909817636773,
+    "test_recall": 0.7348136399682792,
+    "params": "{\"C\": 0.5}"
+  },
+  "results_path": "/home/ubuntu/rainfall/rain_prediction_MLops/models/svm_classifier_benchmark/svm_candidate_results.csv",
+  "notes_path": "/home/ubuntu/rainfall/rain_prediction_MLops/models/svm_classifier_benchmark/notes.md"
+}

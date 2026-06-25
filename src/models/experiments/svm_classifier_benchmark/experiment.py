@@ -6,6 +6,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import mlflow
 
 from src.models.experiments.hybrid_imputation_breakthrough.experiment import tune_threshold_from_validation
 from src.models.ines_feature_modeling import TARGET, fit_model_by_name, predict_proba_for_model, score_predictions
@@ -137,6 +138,8 @@ def evaluate_svm_feature_set(
 def run_experiment() -> dict[str, Any]:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     write_notes()
+    
+    mlflow.set_experiment("rain_prediction_comparisons")
 
     config = PipelineConfig(name="hybrid_default")
     train_df, valid_df, test_df, feature_sets = prepare_standard_split_frames(config=config, keep_date=False)
@@ -145,34 +148,44 @@ def run_experiment() -> dict[str, Any]:
 
     rows: list[dict[str, Any]] = []
     for candidate in CANDIDATE_CONFIGS:
-        features = list(base_features)
-        if candidate.get("drop_location", False):
-            features = [feature for feature in features if feature != "location"]
+        if mlflow.active_run() is not None:
+            mlflow.end_run()
 
-        metrics = evaluate_svm_feature_set(
-            train_df,
-            valid_df,
-            test_df,
-            features,
-            params={"C": float(candidate["C"])},
-        )
-        row = {
-            "candidate": str(candidate["candidate"]),
-            "candidate_label": str(candidate["candidate"]).replace("_", " "),
-            "model": str(candidate["model_label"]),
-            "drop_location": bool(candidate["drop_location"]),
-            "C": float(candidate["C"]),
-            "train_support": int(len(train_df)),
-            "validation_support": int(len(valid_df)),
-            "test_support": int(len(test_df)),
-            **metrics,
-        }
-        if winner_metrics:
-            row["winner_test_roc_auc_gap"] = float(row["test_roc_auc"] - winner_metrics["winner_test_roc_auc"])
-            row["winner_test_f1_gap"] = float(row["test_f1"] - winner_metrics["winner_test_f1"])
-            row["winner_test_precision_gap"] = float(row["test_precision"] - winner_metrics["winner_test_precision"])
-            row["winner_test_recall_gap"] = float(row["test_recall"] - winner_metrics["winner_test_recall"])
-        rows.append(row)
+        with mlflow.start_run(run_name=str(candidate["candidate"])):
+            features = list(base_features)
+            if candidate.get("drop_location", False):
+                features = [feature for feature in features if feature != "location"]
+
+            metrics = evaluate_svm_feature_set(
+                train_df,
+                valid_df,
+                test_df,
+                features,
+                params={"C": float(candidate["C"])},
+            )
+            row = {
+                "candidate": str(candidate["candidate"]),
+                "candidate_label": str(candidate["candidate"]).replace("_", " "),
+                "model": str(candidate["model_label"]),
+                "drop_location": bool(candidate["drop_location"]),
+                "C": float(candidate["C"]),
+                "train_support": int(len(train_df)),
+                "validation_support": int(len(valid_df)),
+                "test_support": int(len(test_df)),
+                **metrics,
+            }
+            if winner_metrics:
+                row["winner_test_roc_auc_gap"] = float(row["test_roc_auc"] - winner_metrics["winner_test_roc_auc"])
+                row["winner_test_f1_gap"] = float(row["test_f1"] - winner_metrics["winner_test_f1"])
+                row["winner_test_precision_gap"] = float(row["test_precision"] - winner_metrics["winner_test_precision"])
+                row["winner_test_recall_gap"] = float(row["test_recall"] - winner_metrics["winner_test_recall"])
+            rows.append(row)
+
+            mlflow.log_param("C", float(candidate["C"]))
+            mlflow.log_param("drop_location", bool(candidate["drop_location"]))
+            mlflow.log_param("model", str(candidate["model_label"]))
+        numeric_metrics = {k: v for k, v in row.items() if isinstance(v, (int, float)) and k != "C"}
+        mlflow.log_metrics(numeric_metrics)
 
     results = (
         pd.DataFrame(rows)

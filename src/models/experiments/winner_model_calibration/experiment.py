@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import mlflow
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -765,16 +767,24 @@ def compare_methods(candidate: dict[str, Any], baseline: dict[str, Any]) -> dict
         "test_reliability_mae_delta": float(candidate["test_reliability_mae"] - baseline["test_reliability_mae"]),
     }
 
-
 def run_experiment() -> dict[str, Any]:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
+    mlflow.set_experiment("rain_prediction_comparisons")
+    if mlflow.active_run() is not None:
+        mlflow.end_run()
+    mlflow.start_run(run_name="winner_model_calibration")
+    
     winner_variant, selected_feature_set_name, train_df, valid_df, test_df, feature_sets, features = prepare_final_winner_frames(
         keep_date=True
     )
     best_selection = load_best_hybrid_selection()
     params = best_selection["params"]
+    
+    mlflow.log_params(params)
+    mlflow.log_param("feature_count", len(features))
+    
     location_to_climate_regime = load_location_to_climate_regime()
 
     X_train = train_df[features].copy()
@@ -1307,12 +1317,27 @@ def run_experiment() -> dict[str, Any]:
     )
     methods_frame.to_csv(METHODS_PATH, index=False)
 
+    for method_key, result in method_results.items():
+        mlflow.log_metrics(
+            {
+                f"{method_key}__test_roc_auc": result["test_roc_auc"],
+                f"{method_key}__test_f1": result["test_f1"],
+                f"{method_key}__test_brier": result["test_brier"],
+                f"{method_key}__test_log_loss": result["test_log_loss"],
+                f"{method_key}__test_reliability_mae": result["test_reliability_mae"],
+            }
+        )
+        
     hierarchical_promotion = (
         method_results[best_time_series_hierarchical_key]["test_brier"] <= method_results[best_time_series_climate_key]["test_brier"]
         and method_results[best_time_series_hierarchical_key]["test_log_loss"] <= method_results[best_time_series_climate_key]["test_log_loss"]
         and method_results[best_time_series_hierarchical_key]["test_reliability_mae"] <= method_results[best_time_series_climate_key]["test_reliability_mae"]
     )
     recommended_key = best_time_series_hierarchical_key if hierarchical_promotion else best_time_series_climate_key
+    
+    mlflow.set_tag("recommended_method_key", recommended_key)
+    mlflow.set_tag("recommended_method_label", method_results[recommended_key]["method_label"])
+    
     recommended_figure = {
         "time_series_sigmoid": SIGMOID_FIGURE_PATH,
         "time_series_isotonic": ISOTONIC_FIGURE_PATH,
@@ -1466,6 +1491,11 @@ def run_experiment() -> dict[str, Any]:
         },
     }
     SUMMARY_PATH.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    
+    mlflow.log_artifact(str(SUMMARY_PATH))
+    mlflow.log_artifact(str(METHODS_PATH))
+    mlflow.end_run()
+    
     return summary
 
 

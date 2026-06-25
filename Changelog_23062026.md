@@ -37,3 +37,43 @@ The first two files were restored manually and pushed. The remaining three are s
 2. Is `train_baseline.py` still needed, or can it be removed as legacy code?
 
 For now, please ignore `train_baseline.py` and use `train_winner.py` only.
+
+# Changelog 24.06.26
+Fix UID-mismatch permission errors blocking Airflow daily ingestion DAG
+
+The Airflow container runs as UID 50000, but host-created bind-mounted
+directories (airflow/logs, data/incoming, data/raw, reports/versioning,
+.dvc) were owned by the host user, causing PermissionError failures in
+fetch_and_upsert_daily_weather and version_raw_weather_data tasks.
+Fixed by chowning these paths to 50000:0 for container writes.
+
+Also trims DEFAULT_LOCAL_INPUTS in dvc_versioning.py to drop legacy
+preprocessed CSVs that train_winner.py no longer reads directly,
+removing a false verify-local blocker.
+
+Verified daily_weather_ingestion DAG runs end-to-end: Open-Meteo
+ingestion → dvc add → freshness check (fresh, 1-day lag) → snapshot →
+dvc status recording → local-only no-push notice.
+
+
+Fix: PermissionError: [Errno 13] Permission denied: '/opt/airflow/logs/scheduler'
+
+
+vm bash:
+
+mkdir -p airflow/logs airflow/dags
+sudo chown -R 50000:0 airflow/logs
+
+
+
+mkdir -p data/incoming
+sudo chown -R 50000:0 data/incoming
+
+sudo chown -R 50000:0 data/raw data/incoming reports/versioning
+
+sudo chown -R 50000:0 .dvc
+
+Finally on VM (after testing)
+sudo chown -R $(whoami):$(whoami) .dvc
+
+# long-term fix: building the Airflow image with --build-arg AIRFLOW_UID=$(id -u) so it matches your host UID
