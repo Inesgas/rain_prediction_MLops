@@ -1,0 +1,58 @@
+{
+  "experiment": "variable_specific_missingness_design",
+  "selection_basis": "validation_first_chronological_split",
+  "best_result": {
+    "variant": "hybrid_plus_expanded_missingness",
+    "feature_count": 81.0,
+    "validation_threshold": 0.5600000000000003,
+    "validation_f1": 0.6713112197150879,
+    "validation_roc_auc": 0.9063095982290581,
+    "validation_precision": 0.6468937875751503,
+    "validation_recall": 0.6976442619407823,
+    "test_roc_auc": 0.8973465710866031,
+    "test_f1": 0.6797891036906855,
+    "test_precision": 0.610479797979798,
+    "test_recall": 0.7668517049960349,
+    "params": "{\"bagging_temperature\": 0.15599452033620265, \"depth\": 8, \"iterations\": 400, \"l2_leaf_reg\": 5.190609389379256, \"learning_rate\": 0.05107988650278712, \"random_strength\": 0.31203728088487304}"
+  },
+  "top_predictive_missingness": [
+    {
+      "variable": "wind_gust_dir",
+      "missing_pct_overall": 0.06534482879374706,
+      "missing_pct_rainy_days": 0.07691348402182385,
+      "missing_pct_non_rainy_days": 0.06199302657489206,
+      "rainy_minus_non_rainy_missing_pct": 0.014920457446931795
+    },
+    {
+      "variable": "rainfall",
+      "missing_pct_overall": 0.009847248583495003,
+      "missing_pct_rainy_days": 0.02107560405300078,
+      "missing_pct_non_rainy_days": 0.006594041876682384,
+      "rainy_minus_non_rainy_missing_pct": 0.014481562176318394
+    },
+    {
+      "variable": "rain_today",
+      "missing_pct_overall": 0.009847248583495003,
+      "missing_pct_rainy_days": 0.02107560405300078,
+      "missing_pct_non_rainy_days": 0.006594041876682384,
+      "rainy_minus_non_rainy_missing_pct": 0.014481562176318394
+    },
+    {
+      "variable": "wind_gust_speed",
+      "missing_pct_overall": 0.06492460481436606,
+      "missing_pct_rainy_days": 0.07613406079501168,
+      "missing_pct_non_rainy_days": 0.06167687388217441,
+      "rainy_minus_non_rainy_missing_pct": 0.014457186912837275
+    },
+    {
+      "variable": "evaporation",
+      "missing_pct_overall": 0.42612812629131325,
+      "missing_pct_rainy_days": 0.4370381917381138,
+      "missing_pct_non_rainy_days": 0.42296713818582554,
+      "rainy_minus_non_rainy_missing_pct": 0.01407105355228827
+    }
+  ],
+  "results_path": "/home/ubuntu/rainfall/rain_prediction_MLops/models/missingness_aware_hybrid_model/missing_family_design_results.csv",
+  "diagnostic_summary_path": "/home/ubuntu/rainfall/rain_prediction_MLops/models/missingness_aware_hybrid_model/missingness_variable_summary.csv",
+  "notes_path": "/home/ubuntu/rainfall/rain_prediction_MLops/models/missingness_aware_hybrid_model/notes.md"
+}

@@ -107,7 +107,11 @@ def train_winner(
         numeric_metrics = {k: v for k, v in metrics.items() if k not in date_fields}
         mlflow.log_metrics(numeric_metrics)
         mlflow.log_params({k: metrics[k] for k in date_fields})
-        mlflow.catboost.log_model(model, artifact_path="model")
+        mlflow.catboost.log_model(
+        model,
+        artifact_path="model",
+        registered_model_name="rain_prediction_catboost",
+)
         
         
         

@@ -21,9 +21,10 @@ DEFAULT_MODEL_SAMPLE = PROJECT_ROOT / "models" / "final_winner" / "sample_input.
 
 DEFAULT_LOCAL_INPUTS = [
     "data/raw/weatherAUS.csv",
-    "data/preprocessed/rain_model_dataset.csv",
-    "data/preprocessed/rain_model_dataset_aligned.csv",
-    "data/preprocessed/rain_model_dataset_feature_experiments.csv",
+    # 3 files are actual are not needed by the actual production training path
+ #   "data/preprocessed/rain_model_dataset.csv",
+  #  "data/preprocessed/rain_model_dataset_aligned.csv",
+   # "data/preprocessed/rain_model_dataset_feature_experiments.csv",
 ]
 
 

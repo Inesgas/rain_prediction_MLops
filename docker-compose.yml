@@ -108,9 +108,12 @@ services:
       MLOPS_E2E_SCHEDULE: ""
       _AIRFLOW_WWW_USER_USERNAME: admin
       _AIRFLOW_WWW_USER_PASSWORD: airflow
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
+      MLFLOW_TRACKING_USERNAME: ${MLFLOW_TRACKING_USERNAME}
+      MLFLOW_TRACKING_PASSWORD: ${MLFLOW_TRACKING_PASSWORD}
     volumes:
       - ./airflow/dags:/opt/airflow/dags
-      - ./:/opt/airflow/project
+      - ./:/opt/airflow/project 
       - airflow_logs:/opt/airflow/logs
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]

@@ -353,3 +353,4 @@ Each run will print a DagsHub link to the experiment and the specific run, e.g.:
     View experiment at: https://dagshub.com/Inesgas/rain_prediction_MLops.mlflow/#/experiments/0
 
 Security note: .env is git-ignored and must never be committed. Only .env.example (with placeholder values) is tracked in the repository.
+
