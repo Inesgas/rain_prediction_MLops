@@ -77,6 +77,26 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/dashboards/rain_prediction_dashboard.json
 
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.17.2
+    container_name: mlflow
+    restart: unless-stopped
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --artifacts-destination /mlflow/artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   node-exporter:
     image: prom/node-exporter:latest
     container_name: node-exporter
@@ -96,21 +116,35 @@ services:
         airflow users create -u admin -p airflow -f Admin -l User -r Admin -e admin@example.com ||
         airflow users reset-password -u admin -p airflow;
         airflow scheduler &
-        exec airflow webserver
+        scheduler_pid=$$!;
+        airflow webserver &
+        webserver_pid=$$!;
+        trap 'kill $$scheduler_pid $$webserver_pid 2>/dev/null || true' TERM INT;
+        wait -n $$scheduler_pid $$webserver_pid;
+        exit_code=$$?;
+        kill $$scheduler_pid $$webserver_pid 2>/dev/null || true;
+        exit $$exit_code
       "
     restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
       AIRFLOW_PROJECT_DIR: /opt/airflow/project
       MLOPS_E2E_SCHEDULE: ""
+      MODEL_VERSIONING_SCHEDULE: "${MODEL_VERSIONING_SCHEDULE-0 4 * * *}"
+      MLFLOW_TRACKING_URI: ${AIRFLOW_MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      MLFLOW_EXPERIMENT_NAME: ${MLFLOW_EXPERIMENT_NAME:-rain_prediction_winner}
+      MLFLOW_REGISTERED_MODEL_NAME: ${MLFLOW_REGISTERED_MODEL_NAME:-rain_prediction_final_winner}
+      MLFLOW_REGISTER_MODEL: ${MLFLOW_REGISTER_MODEL:-true}
+      MLFLOW_TRACKING_USERNAME: ${MLFLOW_TRACKING_USERNAME:-}
+      MLFLOW_TRACKING_PASSWORD: ${MLFLOW_TRACKING_PASSWORD:-}
       _AIRFLOW_WWW_USER_USERNAME: admin
       _AIRFLOW_WWW_USER_PASSWORD: airflow
-      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
-      MLFLOW_TRACKING_USERNAME: ${MLFLOW_TRACKING_USERNAME}
-      MLFLOW_TRACKING_PASSWORD: ${MLFLOW_TRACKING_PASSWORD}
+    depends_on:
+      mlflow:
+        condition: service_healthy
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./:/opt/airflow/project 
@@ -124,4 +158,5 @@ services:
 volumes:
   prometheus_data:
   grafana_data:
+  mlflow_data:
   airflow_logs:

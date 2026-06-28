@@ -54,6 +54,7 @@ rain_prediction_mlops/
 | `src/docker/frontend/` | Streamlit service dashboard |
 | `src/docker/testing/` | API and inference validation service |
 | `src/script/` | Project automation scripts |
+| `src/versioning/` | DVC version manifests and MLflow model tracking handoff |
 | `src/models/` | Winner training, inference, API logic, model utilities, and experiment modules |
 | `data/raw/` | Original weather dataset |
 | `data/preprocessed/` | Modeling tables, selected feature lists, feature rankings, and location metadata |
@@ -87,7 +88,7 @@ The project has two local deployment paths.
 | Docker Compose stack | Local development for FastAPI, Nginx, Prometheus, Grafana, and Airflow | `docker-compose.yml` |
 | Kubernetes stack | Production-style local deployment with scalable FastAPI and separated Airflow services | `kubernetes/kustomization.yaml` |
 
-The work is local-first. The Airflow DAGs update local files, local DVC metadata, and local reports. They do not push to GitHub or DagsHub.
+The work is local-first. The Airflow DAGs update local files, local DVC metadata, local reports, and the configured MLflow tracking URI. They do not push Git commits or DVC objects to GitHub/DagsHub.
 
 ### Local Credentials
 
@@ -96,6 +97,7 @@ The work is local-first. The Airflow DAGs update local files, local DVC metadata
 | Airflow | Docker Compose root stack | `http://localhost:8080` | `admin` | `airflow` | Defined in `docker-compose.yml`. |
 | Airflow | Legacy dev compose | `http://localhost:8080` | `airflow` | `airflow` | Defined in `src/docker/docker-compose-dev.yml`. |
 | Airflow | Kubernetes | port-forward to `http://localhost:18080` | `admin` | `rain-airflow-admin-change-me` | Defined in `kubernetes/airflow-secret.yaml`; placeholder for local reuse. |
+| MLflow | Docker Compose root stack | `http://localhost:5000` | none | none | Airflow logs trained winner model runs here by default. |
 | Grafana | Docker Compose | `http://localhost:3000` | `admin` | `admin` | Defined in `docker-compose.yml`. |
 | Prometheus | Docker Compose | `http://localhost:9090` | none | none | Local monitoring only. |
 | Nginx gateway | Docker Compose | `https://localhost` | `andrey`, `ines`, `gunter`, `admin` | stored as hashes | Password hashes are in `nginx/.htpasswd`; plaintext passwords cannot be recovered from the file. |
@@ -191,6 +193,7 @@ Main URLs:
 | --- | --- |
 | Nginx gateway | `https://localhost` |
 | Airflow | `http://localhost:8080` |
+| MLflow | `http://localhost:5000` |
 | Prometheus | `http://localhost:9090` |
 | Grafana | `http://localhost:3000` |
 
@@ -218,7 +221,7 @@ docker compose stop prediction-traffic
 
 ## Local Airflow Versioning
 
-The `data_model_versioning` DAG orchestrates local-only data and model versioning with DVC:
+The `data_model_versioning` DAG orchestrates local-only data and model versioning with DVC. It is scheduled by default with `MODEL_VERSIONING_SCHEDULE=0 4 * * *`, so it runs daily at 04:00 UTC after the daily weather ingestion window:
 
 1. Extract or validate `data/raw/weatherAUS.csv`.
 2. Update the local DVC pointer for the raw dataset.
@@ -226,15 +229,25 @@ The `data_model_versioning` DAG orchestrates local-only data and model versionin
 4. Write an input version manifest to `reports/versioning/`.
 5. Train the final winner model.
 6. Update the local DVC pointer for `models/final_winner/winner_model.joblib`.
-7. Write output and DVC status manifests to `reports/versioning/`.
+7. Write the output version manifest to `reports/versioning/`.
+8. Log model parameters, metrics, metadata artifacts, and the CatBoost model to MLflow.
+9. Write the DVC status manifest to `reports/versioning/`.
 
-It does not push to GitHub or DagsHub. To run Airflow locally:
+It does not push Git commits or DVC objects to GitHub/DagsHub. To run Airflow and the local MLflow server:
 
 ```powershell
-docker compose up -d --build airflow
+docker compose up -d --build mlflow airflow
 ```
 
-Access Airflow at `http://localhost:8080` with username `admin` and password `airflow`, then trigger `data_model_versioning`.
+Access Airflow at `http://localhost:8080` with username `admin` and password `airflow`. Keep `data_model_versioning` unpaused for fully automatic daily DVC versioning, model retraining, and MLflow logging. Open MLflow at `http://localhost:5000` to inspect the `rain_prediction_winner` experiment and the registered `rain_prediction_final_winner` model.
+
+The MLflow handoff is implemented by:
+
+```powershell
+python -m src.versioning.mlflow_tracking log-model --run-id manual
+```
+
+Airflow runs that command automatically after training. Docker Compose sets `MLFLOW_TRACKING_URI=http://mlflow:5000` inside Airflow. To disable scheduled retraining and keep the DAG manual, set `MODEL_VERSIONING_SCHEDULE` to an empty string before starting Airflow. For DagsHub-hosted tracking, set `AIRFLOW_MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_USERNAME`, and `MLFLOW_TRACKING_PASSWORD` from `.env.example` before starting the stack.
 
 The `daily_weather_ingestion` DAG runs on a daily schedule and only updates the
 local raw dataset plus DVC metadata. It does not retrain the served model.

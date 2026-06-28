@@ -34,12 +34,12 @@ default_args = {
 
 with DAG(
     dag_id="end_to_end_mlops_pipeline",
-    description="Complete local MLOps orchestration: extract, version, train, validate, and snapshot.",
+    description="Complete local MLOps orchestration: extract, version, train, track, validate, and snapshot.",
     start_date=datetime(2026, 1, 1),
     schedule=optional_schedule(),
     catchup=False,
     default_args=default_args,
-    tags=["mlops", "end-to-end", "airflow", "dvc", "fastapi"],
+    tags=["mlops", "end-to-end", "airflow", "dvc", "mlflow", "fastapi"],
 ) as dag:
     start = EmptyOperator(task_id="start")
 
@@ -104,6 +104,15 @@ with DAG(
         ),
     )
 
+    log_model_to_mlflow = BashOperator(
+        task_id="log_model_to_mlflow",
+        bash_command=project_command(
+            "python -m src.versioning.mlflow_tracking log-model "
+            "--run-id '{{ run_id }}'"
+        ),
+        execution_timeout=timedelta(minutes=30),
+    )
+
     validate_official_fastapi_contract = BashOperator(
         task_id="validate_official_fastapi_contract",
         bash_command=project_command("python -m pytest tests/test_prediction_api_contract.py"),
@@ -119,7 +128,7 @@ with DAG(
 
     local_only_notice = BashOperator(
         task_id="local_only_no_remote_push",
-        bash_command="echo 'End-to-end pipeline complete. No GitHub or DagsHub push was performed.'",
+        bash_command="echo 'End-to-end pipeline complete. No GitHub or DVC remote push was performed.'",
     )
 
     end = EmptyOperator(task_id="end")
@@ -134,6 +143,7 @@ with DAG(
         >> train_winner_model
         >> version_model_artifact
         >> snapshot_output_versions
+        >> log_model_to_mlflow
         >> validate_official_fastapi_contract
         >> record_dvc_status
         >> local_only_notice
