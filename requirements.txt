@@ -6,7 +6,13 @@ catboost==1.2.10
 pytest==9.0.2
 matplotlib==3.10.8
 seaborn==0.13.2
-plotly==6.6.0
+
+# Pinned <6 because evidently 0.7.21 requires plotly<6,>=5.10.0. Verified against
+# notebooks/01_data_audit.ipynb (px/go only, no v6-specific features) and
+# src/docker/frontend/frontend_requirements.txt plotly>=5.15.0
+plotly==5.24.1
+evidently==0.7.21
+
 jupyter==1.1.1
 notebook==7.5.5
 ipykernel==7.2.0
