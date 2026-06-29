@@ -109,6 +109,16 @@ services:
       context: .
       dockerfile: docker/airflow/airflow.Dockerfile
     container_name: airflow
+        # Run the container as the host user's own UID (read from .env, see .env.example)
+    # instead of the image's hardcoded UID 50000. Without this, every file Airflow
+    # writes into the bind-mounted project dir (./:/opt/airflow/project) ends up
+    # owned by UID 50000, which the host user then can't read/write — forcing
+    # manual `sudo chown -R 50000:0 ...` after every run. This setting eliminates
+    # that permanently and works for every developer/machine since AIRFLOW_UID
+    # is per-person, not shared in git. Apache's own docker-compose docs use
+    # this exact pattern: GID 0 (root group) is intentional — the Airflow image
+    # grants group-root the needed permissions, so any UID + GID 0 works.
+    user: "${AIRFLOW_UID:-50000}:0"
     command: >
       bash -c "
         set -e;
@@ -134,7 +144,7 @@ services:
       AIRFLOW_PROJECT_DIR: /opt/airflow/project
       MLOPS_E2E_SCHEDULE: ""
       MODEL_VERSIONING_SCHEDULE: "${MODEL_VERSIONING_SCHEDULE-0 4 * * *}"
-      MLFLOW_TRACKING_URI: ${AIRFLOW_MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      MLFLOW_TRACKING_URI: https://dagshub.com/Inesgas/rain_prediction_MLops.mlflow
       MLFLOW_EXPERIMENT_NAME: ${MLFLOW_EXPERIMENT_NAME:-rain_prediction_winner}
       MLFLOW_REGISTERED_MODEL_NAME: ${MLFLOW_REGISTERED_MODEL_NAME:-rain_prediction_final_winner}
       MLFLOW_REGISTER_MODEL: ${MLFLOW_REGISTER_MODEL:-true}
