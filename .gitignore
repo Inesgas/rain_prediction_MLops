@@ -55,6 +55,7 @@ reports/*
 !reports/versioning/
 reports/versioning/*
 !reports/versioning/.gitkeep
+mlruns/
 
 # Local Airflow runtime state
 airflow/logs/

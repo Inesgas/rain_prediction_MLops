@@ -26,6 +26,20 @@ services:
     depends_on:
       - prediction
 
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.17.2
+    container_name: rain_prediction_mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --artifacts-destination /mlflow/artifacts
+
   training:
     build:
       context: ../..
@@ -53,6 +67,13 @@ services:
       - AIRFLOW_PROJECT_DIR=/opt/airflow/project
       - PYTHONPATH=/opt/airflow/project
       - MLOPS_E2E_SCHEDULE=${MLOPS_E2E_SCHEDULE:-}
+      - "MODEL_VERSIONING_SCHEDULE=${MODEL_VERSIONING_SCHEDULE-0 */6 * * *}"
+      - MLFLOW_TRACKING_URI=${AIRFLOW_MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      - MLFLOW_EXPERIMENT_NAME=${MLFLOW_EXPERIMENT_NAME:-rain_prediction_winner}
+      - MLFLOW_REGISTERED_MODEL_NAME=${MLFLOW_REGISTERED_MODEL_NAME:-rain_prediction_final_winner}
+      - MLFLOW_REGISTER_MODEL=${MLFLOW_REGISTER_MODEL:-true}
+      - MLFLOW_TRACKING_USERNAME=${MLFLOW_TRACKING_USERNAME:-}
+      - MLFLOW_TRACKING_PASSWORD=${MLFLOW_TRACKING_PASSWORD:-}
       - WEATHER_AUS_SOURCE=${WEATHER_AUS_SOURCE:-}
       - WEATHER_AUS_SOURCE_URL=${WEATHER_AUS_SOURCE_URL:-}
       - WEATHER_AUS_SOURCE_SHA256=${WEATHER_AUS_SOURCE_SHA256:-}
@@ -76,6 +97,8 @@ services:
       - ../..:/opt/airflow/project
       - ../../airflow/dags:/opt/airflow/dags
       - ../../airflow/logs:/opt/airflow/logs
+    depends_on:
+      - mlflow
     command: standalone
 
   dashboard:
@@ -92,3 +115,6 @@ services:
       - ../../src:/app/src
     depends_on:
       - gateway
+
+volumes:
+  mlflow_data:

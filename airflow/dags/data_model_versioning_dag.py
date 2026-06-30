@@ -19,6 +19,11 @@ def project_command(command: str) -> str:
     )
 
 
+def model_versioning_schedule() -> str | None:
+    value = os.environ.get("MODEL_VERSIONING_SCHEDULE", "0 */6 * * *").strip()
+    return value or None
+
+
 default_args = {
     "owner": "rain-prediction-mlops",
     "retries": 1,
@@ -28,12 +33,12 @@ default_args = {
 
 with DAG(
     dag_id="data_model_versioning",
-    description="DVC-backed data and model artifact versioning for the rain prediction project.",
+    description="DVC-backed data/model versioning plus MLflow tracking for the rain prediction project.",
     start_date=datetime(2026, 1, 1),
-    schedule=None,
+    schedule=model_versioning_schedule(),
     catchup=False,
     default_args=default_args,
-    tags=["versioning", "dvc", "model"],
+    tags=["versioning", "dvc", "mlflow", "model"],
 ) as dag:
     start = EmptyOperator(task_id="start")
 
@@ -83,6 +88,15 @@ with DAG(
         ),
     )
 
+    log_model_to_mlflow = BashOperator(
+        task_id="log_model_to_mlflow",
+        bash_command=project_command(
+            "python -m src.versioning.mlflow_tracking log-model "
+            "--run-id '{{ run_id }}'"
+        ),
+        execution_timeout=timedelta(minutes=30),
+    )
+
     dvc_status = BashOperator(
         task_id="record_dvc_status",
         bash_command=project_command(
@@ -92,7 +106,7 @@ with DAG(
 
     local_only_notice = BashOperator(
         task_id="local_only_no_remote_push",
-        bash_command="echo 'Local-only run complete. No GitHub or DagsHub push was performed.'",
+        bash_command="echo 'Local-only DVC run complete. No GitHub or DVC remote push was performed.'",
     )
 
     end = EmptyOperator(task_id="end")
@@ -106,6 +120,7 @@ with DAG(
         >> train_winner_model
         >> version_model_artifact
         >> snapshot_outputs
+        >> log_model_to_mlflow
         >> dvc_status
         >> local_only_notice
         >> end
