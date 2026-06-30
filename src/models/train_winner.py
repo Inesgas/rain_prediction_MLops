@@ -20,6 +20,7 @@ from src.config.paths import (
     FINAL_WINNER_METADATA_PATH,
     FINAL_WINNER_MODEL_ARTIFACT,
     FINAL_WINNER_SAMPLE_INPUT_PATH,
+    REFERENCE_DATASET_PATH,
     TARGET_COLUMN,
 )
 from src.models.experiments.geo_climate_context_extension.experiment import prepare_variant_frames
@@ -81,6 +82,13 @@ def train_winner(
     if model is None:
         raise RuntimeError("CatBoost is not available in this environment.")
 
+    # evidently drift monitoring
+    from src.config.paths import REFERENCE_DATASET_PATH, MONITORING_DIR
+
+    MONITORING_DIR.mkdir(parents=True, exist_ok=True)
+    X_train_ready.assign(**{TARGET_COLUMN: y_train}).to_csv(REFERENCE_DATASET_PATH, index=False)
+    # evidently drift monitoring
+
     mlflow.set_experiment("rain_prediction_winner")
     with mlflow.start_run(run_name=config.get("model_name", "final_hybrid_catboost")):
         model.fit(X_train_ready, y_train, cat_features=categorical_features)
@@ -112,9 +120,9 @@ def train_winner(
         artifact_path="model",
         registered_model_name="rain_prediction_catboost",
 )
-        
-        
-        
+
+
+
 
     output_dir.mkdir(parents=True, exist_ok=True)
     artifact = {

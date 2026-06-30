@@ -21,3 +21,8 @@ FINAL_WINNER_CONFIG_PATH = FINAL_WINNER_DIR / "model_config.json"
 RANDOM_STATE = 42
 TARGET_COLUMN = "rain_tomorrow"
 DATE_COLUMN = "date"
+
+# Evidently drift monitoring
+MONITORING_DIR = DATA_DIR / "monitoring"
+REFERENCE_DATASET_PATH = MONITORING_DIR / "reference_dataset.csv"
+
