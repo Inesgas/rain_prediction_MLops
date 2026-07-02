@@ -13,3 +13,7 @@ httpx>=0.27.0
 prometheus-fastapi-instrumentator>=6.1.0
 # Keep this pinned to the MLflow server image version; CI rejects duplicate or 3.x pins.
 mlflow-skinny==2.17.2
+
+# Pinned <6 because evidently 0.7.21 requires plotly<6,>=5.10.0. 02.07.26gn
+plotly==5.24.1
+evidently==0.7.21

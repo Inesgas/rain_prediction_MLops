@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from html import parser
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,7 +59,17 @@ def extract_summary(snapshot) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--days-back", type=int, default=14)
+
+
+# 365 days by default so the current window spans a full seasonal cycle,
+# matching the reference dataset's year-round composition. A short window
+# (e.g. 14 days) picks up one season only and looks like drift even when
+# nothing is actually wrong — see reports/monitoring notes from 2026-07-02.
+
+    parser.add_argument("--days-back", type=int, default=365)
+#   parser.add_argument("--days-back", type=int, default=14)
+
+
     parser.add_argument("--log-to-mlflow", action="store_true")
     args = parser.parse_args()
 
