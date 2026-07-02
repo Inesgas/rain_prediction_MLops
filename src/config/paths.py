@@ -25,4 +25,3 @@ DATE_COLUMN = "date"
 # Evidently drift monitoring
 MONITORING_DIR = DATA_DIR / "monitoring"
 REFERENCE_DATASET_PATH = MONITORING_DIR / "reference_dataset.csv"
-

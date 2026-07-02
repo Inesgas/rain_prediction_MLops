@@ -390,7 +390,7 @@ Default schedule:
 
 ```text
 DRIFT_MONITORING_SCHEDULE=0 6 * * *
-
+```
 
 
 ### Start Airflow with local MLflow
@@ -612,6 +612,3 @@ The integration work extends orchestration, monitoring, Docker Compose, and Kube
 - Add a `Contributing` section for onboarding new collaborators
 - Fail the `drift_monitoring` DAG task when `dataset_drift` is `true`, instead of only logging it
 - Point `drift_monitoring`'s current-window comparison at a continuously updated data source instead of the static `rain_model_dataset_aligned.csv`
-
-
-

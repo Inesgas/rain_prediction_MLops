@@ -233,7 +233,7 @@
     "test_start_date": "2015-11-25",
     "test_end_date": "2026-06-27"
   },
-  "created_at_utc": "2026-06-29T19:06:43.847898+00:00",
+  "created_at_utc": "2026-06-29T11:00:48.882705+00:00",
   "artifact_path": "models/final_winner/winner_model.joblib",
   "config_path": "models/final_winner/model_config.json"
 }
