@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta
-
+import shlex
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
@@ -11,14 +11,13 @@ from airflow.operators.empty import EmptyOperator
 PROJECT_DIR = os.environ.get("AIRFLOW_PROJECT_DIR", "/opt/airflow/project")
 REFERENCE_DATASET_TARGET = "data/monitoring/reference_dataset.csv"
 
-
 def project_command(command: str) -> str:
+    quoted_dir = shlex.quote(PROJECT_DIR)
     return (
-        f"cd {PROJECT_DIR} && "
-        f"export PYTHONPATH={PROJECT_DIR}:$PYTHONPATH && "
+        f"cd {quoted_dir} && "
+        f"export PYTHONPATH={quoted_dir}:$PYTHONPATH && "
         f"{command}"
     )
-
 
 def drift_monitoring_schedule() -> str | None:
     value = os.environ.get("DRIFT_MONITORING_SCHEDULE", "0 6 * * *").strip()

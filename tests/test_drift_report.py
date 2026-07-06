@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import sys
 import numpy as np
 import pandas as pd
 import pytest
@@ -82,3 +82,19 @@ def test_load_current_window_filters_by_days_back(tmp_path, monkeypatch):
 
     assert result["date"].min() > dates.max() - pd.Timedelta(days=5)
     assert len(result) == 5
+
+def test_arg_parser_accepts_days_back_and_log_to_mlflow_together():
+    parser = drift_report.build_arg_parser()
+    args = parser.parse_args(["--days-back", "30", "--log-to-mlflow"])
+    assert args.days_back == 30
+    assert args.log_to_mlflow is True
+
+
+def test_main_exits_with_clear_message_for_non_positive_days_back(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["drift_report", "--days-back", "0"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        drift_report.main()
+
+    assert exc_info.value.code == 2
+    assert "--days-back must be a positive integer" in capsys.readouterr().err
