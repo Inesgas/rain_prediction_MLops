@@ -34,8 +34,18 @@ def test_build_snapshot_only_uses_columns_present_in_both_frames():
     summary = drift_report.extract_summary(snapshot)
 
     assert set(summary["per_column"].keys()) == {
-        "humidity_3pm", "humidity_9am", "pressure_9am",
+        "humidity_3pm",
+        "humidity_9am",
+        "pressure_9am",
     }
+
+
+def test_build_snapshot_rejects_frames_without_monitored_columns():
+    reference = pd.DataFrame({"other_reference": [1, 2, 3]})
+    current = pd.DataFrame({"other_current": [1, 2, 3]})
+
+    with pytest.raises(ValueError, match="No monitored columns"):
+        drift_report.build_snapshot(reference, current)
 
 
 def test_extract_summary_no_drift_for_identical_distributions():
@@ -82,3 +92,8 @@ def test_load_current_window_filters_by_days_back(tmp_path, monkeypatch):
 
     assert result["date"].min() > dates.max() - pd.Timedelta(days=5)
     assert len(result) == 5
+
+
+def test_load_current_window_rejects_non_positive_days_back():
+    with pytest.raises(ValueError, match="greater than zero"):
+        drift_report.load_current_window(days_back=0)

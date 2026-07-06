@@ -20,6 +20,7 @@ from src.config.paths import (
     FINAL_WINNER_METADATA_PATH,
     FINAL_WINNER_MODEL_ARTIFACT,
     FINAL_WINNER_SAMPLE_INPUT_PATH,
+    MONITORING_DIR,
     REFERENCE_DATASET_PATH,
     TARGET_COLUMN,
 )
@@ -54,6 +55,14 @@ def _numeric_fill_values(frame: pd.DataFrame, numeric_features: list[str]) -> di
     return values
 
 
+def write_reference_dataset(features: pd.DataFrame, target: pd.Series) -> None:
+    if len(features) != len(target):
+        raise ValueError("Reference dataset features and target must have the same number of rows.")
+
+    MONITORING_DIR.mkdir(parents=True, exist_ok=True)
+    features.assign(**{TARGET_COLUMN: target.to_numpy()}).to_csv(REFERENCE_DATASET_PATH, index=False)
+
+
 def train_winner(
     config_path: Path = FINAL_WINNER_CONFIG_PATH,
     output_dir: Path = FINAL_WINNER_DIR,
@@ -82,16 +91,10 @@ def train_winner(
     if model is None:
         raise RuntimeError("CatBoost is not available in this environment.")
 
-    # evidently drift monitoring
-    from src.config.paths import REFERENCE_DATASET_PATH, MONITORING_DIR
-
-    MONITORING_DIR.mkdir(parents=True, exist_ok=True)
-    X_train_ready.assign(**{TARGET_COLUMN: y_train}).to_csv(REFERENCE_DATASET_PATH, index=False)
-    # evidently drift monitoring
-
     mlflow.set_experiment("rain_prediction_winner")
     with mlflow.start_run(run_name=config.get("model_name", "final_hybrid_catboost")):
         model.fit(X_train_ready, y_train, cat_features=categorical_features)
+        write_reference_dataset(X_train_ready, y_train)
 
         probabilities = model.predict_proba(X_test_ready)[:, 1]
         metrics = {
@@ -116,13 +119,10 @@ def train_winner(
         mlflow.log_metrics(numeric_metrics)
         mlflow.log_params({k: metrics[k] for k in date_fields})
         mlflow.catboost.log_model(
-        model,
-        artifact_path="model",
-        registered_model_name="rain_prediction_catboost",
-)
-
-
-
+            model,
+            artifact_path="model",
+            registered_model_name="rain_prediction_catboost",
+        )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     artifact = {

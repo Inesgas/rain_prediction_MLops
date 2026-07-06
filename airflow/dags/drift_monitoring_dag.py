@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 from datetime import datetime, timedelta
 
 from airflow import DAG
@@ -10,12 +11,14 @@ from airflow.operators.empty import EmptyOperator
 
 PROJECT_DIR = os.environ.get("AIRFLOW_PROJECT_DIR", "/opt/airflow/project")
 REFERENCE_DATASET_TARGET = "data/monitoring/reference_dataset.csv"
+DEFAULT_DAYS_BACK = 365
 
 
 def project_command(command: str) -> str:
+    project_dir = shlex.quote(PROJECT_DIR)
     return (
-        f"cd {PROJECT_DIR} && "
-        f"export PYTHONPATH={PROJECT_DIR}:$PYTHONPATH && "
+        f"cd {project_dir} && "
+        f"export PYTHONPATH={project_dir}:$PYTHONPATH && "
         f"{command}"
     )
 
@@ -54,8 +57,7 @@ with DAG(
         task_id="run_drift_report",
         bash_command=project_command(
             "python -m src.monitoring.drift_report "
-            "--days-back ${DRIFT_MONITORING_DAYS_BACK:-365} "
-            # change -14 to -365 to span a full seasonal cycle, matching the reference dataset's year-round composition. A short window (e.g. 14 days) picks up one season only and looks like drift even when nothing is actually wrong — see reports/monitoring notes from 2026-07-02.
+            f"--days-back ${{DRIFT_MONITORING_DAYS_BACK:-{DEFAULT_DAYS_BACK}}} "
             "--log-to-mlflow"
         ),
         execution_timeout=timedelta(minutes=30),
@@ -68,10 +70,4 @@ with DAG(
 
     end = EmptyOperator(task_id="end")
 
-    (
-        start
-        >> verify_reference_dataset
-        >> run_drift_report
-        >> local_only_notice
-        >> end
-    )
+    start >> verify_reference_dataset >> run_drift_report >> local_only_notice >> end
