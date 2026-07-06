@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+# adding evidently and plotly pins to ensure compatibility with drift monitoring 02.07.26gn
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ALLOWED_MLFLOW_PIN = "mlflow-skinny==2.17.2"
 ALLOWED_EVIDENTLY_PIN = "evidently==0.7.21"
