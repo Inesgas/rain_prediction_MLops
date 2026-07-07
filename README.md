@@ -49,7 +49,7 @@ It serves the final **CatBoost winner model** through a FastAPI-based prediction
 - Experiment tracking with **MLflow**
 - API routing and protection through **Nginx**
 - Workflow orchestration with **Airflow**
-- Monitoring via **Prometheus** and **Grafana**
+- Monitoring via **Prometheus** and **Grafana**, plus data drift monitoring with **evidently**
 - Local development with **Docker Compose**
 - Production-style deployment with **Kubernetes**
 
@@ -71,6 +71,9 @@ Weather data -> preprocessing -> model training -> model artifact
                                                       |
                                                       v
                                           Monitoring / clients / tests
+                                                      ^
+                                                      |
+                                    Evidently drift reports (reference vs. current data)
 ```
 
 ### Deployment modes
@@ -138,6 +141,8 @@ rain_prediction_mlops/
 | `data/sample/` | Sample payloads for the API |
 | `models/final_winner/` | Final served model artifact and metadata |
 | `references/` | Climate references, station data, and notes |
+| `src/monitoring/` | Evidently drift report generation |
+| `data/monitoring/` | DVC-tracked training reference dataset for drift comparisons |
 
 ***
 
@@ -370,6 +375,24 @@ MODEL_VERSIONING_SCHEDULE=0 */6 * * *
 
 This runs every 6 hours.
 
+
+### `drift_monitoring`
+
+This DAG runs an Evidently data drift check between the training reference dataset (`data/monitoring/reference_dataset.csv`, written by `train_winner.py` on every training run) and a rolling window of `data/preprocessed/rain_model_dataset_aligned.csv`.
+
+Pipeline steps:
+
+1. Verify the DVC-tracked reference dataset is present locally
+2. Run `src.monitoring.drift_report` over the configured window and log the HTML report to MLflow
+3. Write `reports/monitoring/drift_<timestamp>.html` and `drift_<timestamp>_summary.json`
+
+Default schedule:
+
+```text
+DRIFT_MONITORING_SCHEDULE=0 6 * * *
+```
+
+
 ### Start Airflow with local MLflow
 
 ```bash
@@ -525,6 +548,10 @@ airflow users reset-password -u admin -p "<new-password>"
 | Airflow `PermissionError` on mounted paths | UID mismatch between host and container | Set `AIRFLOW_UID=$(id -u)` and recreate containers |
 | `AirflowTimetableInvalid` for schedule | Stale exported environment variable overrides `.env` | `unset MODEL_VERSIONING_SCHEDULE` before startup |
 | Airflow run not visible on DagsHub | Airflow still points to local MLflow | Set `AIRFLOW_MLFLOW_TRACKING_URI` explicitly |
+| `ModuleNotFoundError: No module named 'evidently'` in `run_drift_report` | `evidently`/`plotly` missing from the Airflow image's requirements file | Add `evidently==0.7.21` and `plotly==5.24.1` to `docker/airflow/airflow_requirements.txt` and `src/docker/airflow/airflow_requirements.txt`, then rebuild the Airflow image |
+| Airflow image build fails with `ResolutionImpossible` on `cryptography` | `evidently` needs `cryptography>=43.0.1`, which conflicts with the Airflow 2.10.5 constraints file (`cryptography==42.0.8`) | Install `evidently`/`plotly` in a separate `pip install` step without `--constraint`, see `docker/airflow/airflow.Dockerfile` |
+| `drift_monitoring` reports `dataset_drift: true` on every run, 100% of columns | Comparison window too short (e.g. 14 days) captures one season only, while the reference dataset spans a full year | Use `--days-back 365` (the default) so the window covers a full seasonal cycle |
+
 
 ### Helpful diagnostics
 
@@ -573,13 +600,15 @@ The integration work extends orchestration, monitoring, Docker Compose, and Kube
 | `nginx/nginx.conf` | Security gateway for authentication, forwarded users, rate limiting, and protected API access |
 | `docker-compose.yml` | Integrates FastAPI, Nginx, Prometheus, Grafana, Airflow, and prediction traffic |
 | `tests/test_prediction_api_contract.py` | Lightweight contract test for Airflow and CI |
+| `src/monitoring/drift_report.py` | Evidently data drift report generation, invoked by the `drift_monitoring` Airflow DAG |
 
 ***
 
 ## Suggested Next Improvements
-
 - Add real CI status badges from GitHub Actions
 - Add an architecture diagram in `docs/`
 - Add example request and response payloads for `/predict`
 - Add a `Makefile` for common workflows
 - Add a `Contributing` section for onboarding new collaborators
+- Fail the `drift_monitoring` DAG task when `dataset_drift` is `true`, instead of only logging it
+- Point `drift_monitoring`'s current-window comparison at a continuously updated data source instead of the static `rain_model_dataset_aligned.csv`
