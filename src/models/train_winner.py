@@ -85,14 +85,14 @@ def train_winner(
 
     mlflow.set_experiment("rain_prediction_winner")
     with mlflow.start_run(run_name=config.get("model_name", "final_hybrid_catboost")):
-        
+
         model.fit(X_train_ready, y_train, cat_features=categorical_features)
 
         MONITORING_DIR.mkdir(parents=True, exist_ok=True)
         X_train_ready.assign(**{TARGET_COLUMN: y_train}).to_csv(REFERENCE_DATASET_PATH, index=False)
 
         probabilities = model.predict_proba(X_test_ready)[:, 1]
-        
+
         metrics = {
             key: float(value)
             for key, value in score_predictions(y_test, probabilities, threshold=threshold).items()
