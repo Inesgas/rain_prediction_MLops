@@ -1,0 +1,11 @@
+groups:
+  - name: rain_api_infrastructure_alerts
+    rules:
+      - alert: RainApiServerDown
+        expr: up{job="fastapi-internal"} == 0
+        for: 10s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Target instance rain-api is offline"
+          description: "The underlying FastAPI container replicas failed to respond to the Prometheus scrape request for over 10 seconds."

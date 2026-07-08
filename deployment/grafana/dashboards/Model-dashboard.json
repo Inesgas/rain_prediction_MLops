@@ -1,0 +1,157 @@
+{
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Current RMSE",
+      "id": 1,
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "model_rmse_score",
+          "legendFormat": "RMSE",
+          "datasource": "Prometheus"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 0.25, "color": "orange" },
+              { "value": 0.45, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Current MAE",
+      "id": 2,
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "expr": "model_mae_score",
+          "legendFormat": "MAE",
+          "datasource": "Prometheus"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 0.20, "color": "orange" },
+              { "value": 0.35, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Current R² Score",
+      "id": 3,
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "model_r2_score",
+          "legendFormat": "R²",
+          "datasource": "Prometheus"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "red" },
+              { "value": 0.5, "color": "orange" },
+              { "value": 0.8, "color": "green" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "state-timeline",
+      "title": "Daily Metric Batch Status",
+      "id": 4,
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "expr": "absent(model_rmse_score) == 1 or abs(model_rmse_score) >= 0",
+          "legendFormat": "Pipeline",
+          "datasource": "Prometheus"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 0,
+            "fillOpacity": 70
+          },
+          "mappings": [
+            { "type": "special", "options": { "match": "null", "result": { "text": "WAITING FOR AIRFLOW", "color": "orange" } } },
+            { "type": "range", "options": { "from": 0, "to": 999, "result": { "text": "PIPELINE ACTIVE", "color": "green" } } }
+          ]
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Model Error Metrics Over Time (RMSE & MAE)",
+      "id": 5,
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "expr": "model_rmse_score",
+          "legendFormat": "RMSE",
+          "datasource": "Prometheus"
+        },
+        {
+          "expr": "model_mae_score",
+          "legendFormat": "MAE",
+          "datasource": "Prometheus"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth" }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Model Fit Over Time (R² Score)",
+      "id": 6,
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        {
+          "expr": "model_r2_score",
+          "legendFormat": "R² Score",
+          "datasource": "Prometheus"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth" }
+        }
+      }
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "title": "Model Performance & Drift",
+  "time": { "from": "now-7d", "to": "now" }
+}

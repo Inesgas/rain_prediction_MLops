@@ -13,11 +13,16 @@ import logging
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Counter, Histogram, Gauge, REGISTRY
 
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+
 # Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ========== BENUTZER & ROLLEN (NUR FÜR ROLLENPRÜFUNG) ==========
+# Instanziieren Sie HTTPBasic für die Swagger-UI-Anmeldung
+security = HTTPBasic()
+
+# ========== BENUTZER & ROLLEN (CRUCIAL FIX) ==========
 USERS = {
     "andrey": {"role": "admin"},
     "ines": {"role": "admin"},
@@ -25,19 +30,28 @@ USERS = {
     "admin": {"role": "user"}
 }
 
-def get_current_user_from_nginx(request: Request):
+def get_current_user_from_nginx(request: Request, credentials: Optional[HTTPBasicCredentials] = Depends(security)):
+    # 1. Versuch: Den Namen des authentifizierten Benutzers direkt aus dem Nginx-Header lesen
     username = request.headers.get("X-Forwarded-User")
+    
+    # 2. Versuch (Fallback): Wenn kein Header da ist (Direktaufruf der Swagger-UI im Browser)
+    if not username and credentials:
+        username = credentials.username
+        
     if not username:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated"
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Basic"} # Zwingt die Swagger-UI zum Anmeldedialog
         )
+        
     user = USERS.get(username)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found"
         )
+        
     return {"username": username, "role": user["role"]}
 
 def require_admin(current_user: dict = Depends(get_current_user_from_nginx)):
@@ -50,6 +64,7 @@ def require_admin(current_user: dict = Depends(get_current_user_from_nginx)):
 
 def require_user(current_user: dict = Depends(get_current_user_from_nginx)):
     return current_user
+
 
 # ========== FASTAPI APP ==========
 app = FastAPI(
@@ -174,6 +189,31 @@ def load_model():
 def shutdown_event():
     logger.info("Application shutting down")
 
+# ========== DATA LOGGING SETUP ==========
+# This folder is mounted via docker-compose volume: - ./data:/app/data
+LOG_DIR = Path("data/monitoring/predictions")
+
+def log_predictions_to_csv(records: List[dict]):
+    """
+    Appends a list of prediction records to the daily CSV file.
+    Runs asynchronously via background tasks to protect API request latency.
+    """
+    try:
+        if not records:
+            return
+            
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        today_str = datetime.date.today().strftime("%Y-%m-%d")
+        file_path = LOG_DIR / f"predictions_{today_str}.csv"
+        
+        new_data = pd.DataFrame(records)
+        file_exists = file_path.is_file()
+        new_data.to_csv(file_path, mode='a', header=not file_exists, index=False)
+        logger.info(f"Logged {len(records)} prediction(s) to {file_path.name}")
+    except Exception as e:
+        logger.error(f"Failed to log predictions to CSV: {e}")
+        prediction_errors.labels(error_type="csv_logging_failed").inc()
+
 # ========== PYDANTIC MODELS ==========
 class InferencePayload(BaseModel):
     location: str = Field(..., description="Location name")
@@ -260,10 +300,10 @@ def predict(payload: InferencePayload, background_tasks: BackgroundTasks, curren
         
         prediction = model.predict(eval_pool)
         prediction_proba = model.predict_proba(eval_pool) if hasattr(model, "predict_proba") else None
-        pred_value = int(prediction[0]) if isinstance(prediction, (np.ndarray, list)) else int(prediction)
+        pred_value = int(prediction) if isinstance(prediction, (np.ndarray, list)) else int(prediction)
         confidence = float(np.max(prediction_proba)) if prediction_proba is not None else None
         
-        # ========== FACHLICHE METRIKEN ==========
+        # ========== PROMETHEUS METRICS ==========
         predictions_total.labels(
             location=payload.location,
             rain_tomorrow="Yes" if pred_value == 1 else "No"
@@ -273,10 +313,19 @@ def predict(payload: InferencePayload, background_tasks: BackgroundTasks, curren
             prediction_confidence.observe(confidence)
             latest_confidence.set(confidence)
         
-        # Input Werte für Data Drift Überwachung
+        # Input values for data drift monitoring
         input_humidity.labels(location=payload.location).set(payload.humidity_3pm)
         input_rainfall.labels(location=payload.location).set(payload.rainfall)
         input_pressure.labels(location=payload.location).set(payload.pressure_3pm)
+        
+        # ========== BACKGROUND CSV LOGGING ==========
+        log_record = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "location": payload.location,
+            "predicted_rain": pred_value,
+            "confidence": confidence
+        }
+        background_tasks.add_task(log_predictions_to_csv, [log_record])
         
         return PredictionResponse(
             prediction=pred_value,
@@ -290,11 +339,17 @@ def predict(payload: InferencePayload, background_tasks: BackgroundTasks, curren
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/predict/batch", tags=["Prediction"])
-def predict_batch(payload: BatchInferencePayload, current_user: dict = Depends(require_user)):
+def predict_batch(
+    payload: BatchInferencePayload, 
+    background_tasks: BackgroundTasks, 
+    current_user: dict = Depends(require_user)
+):
     if model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded.")
     
     results = []
+    log_records_batch = []
+    
     for sample in payload.samples:
         try:
             input_data = sample.model_dump()
@@ -313,10 +368,10 @@ def predict_batch(payload: BatchInferencePayload, current_user: dict = Depends(r
             
             prediction = model.predict(eval_pool)
             prediction_proba = model.predict_proba(eval_pool) if hasattr(model, "predict_proba") else None
-            pred_value = int(prediction[0]) if isinstance(prediction, (np.ndarray, list)) else int(prediction)
+            pred_value = int(prediction) if isinstance(prediction, (np.ndarray, list)) else int(prediction)
             confidence = float(np.max(prediction_proba)) if prediction_proba is not None else None
             
-            # Batch-Metriken
+            # Batch Metrics for Prometheus
             predictions_total.labels(
                 location=sample.location,
                 rain_tomorrow="Yes" if pred_value == 1 else "No"
@@ -328,8 +383,22 @@ def predict_batch(payload: BatchInferencePayload, current_user: dict = Depends(r
                 "rain_tomorrow": "Yes" if pred_value == 1 else "No",
                 "confidence": confidence
             })
+            
+            # Collect data for the daily batch log file
+            log_records_batch.append({
+                "timestamp": datetime.datetime.now().isoformat(),
+                "location": sample.location,
+                "predicted_rain": pred_value,
+                "confidence": confidence
+            })
+            
         except Exception as e:
             results.append({"location": sample.location, "error": str(e)})
+            prediction_errors.labels(error_type="batch_sample_failed").inc()
+            
+    # Trigger background logging task for the entire batch list
+    if log_records_batch:
+        background_tasks.add_task(log_predictions_to_csv, log_records_batch)
     
     return {"total_samples": len(payload.samples), "results": results}
 
