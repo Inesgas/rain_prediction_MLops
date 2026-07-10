@@ -69,4 +69,4 @@ nginx/certs/*.key
 kubernetes/fastapi-secret.yaml
 .env
 .env.local
-.env.*.local
+.env.*.localnginx/.htpasswd

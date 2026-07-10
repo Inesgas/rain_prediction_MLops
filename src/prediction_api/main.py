@@ -24,10 +24,10 @@ security = HTTPBasic(auto_error=False)
 
 # ========== BENUTZER & ROLLEN (CRUCIAL FIX) ==========
 USERS = {
-    "andrey": {"role": "admin"},
-    "ines": {"role": "admin"},
-    "gunter": {"role": "admin"},
-    "admin": {"role": "user"}
+    "andrey": {"role": "user"},
+    "ines": {"role": "user"},
+    "gunter": {"role": "user"},
+    "admin": {"role": "admin"}
 }
 
 def get_current_user_from_nginx(request: Request, credentials: Optional[HTTPBasicCredentials] = Depends(security)):
