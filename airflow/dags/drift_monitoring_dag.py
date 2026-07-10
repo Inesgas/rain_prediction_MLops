@@ -55,7 +55,7 @@ with DAG(
             "python -m src.monitoring.drift_report "
             "--days-back ${DRIFT_MONITORING_DAYS_BACK:-365} "
             # change -14 to -365 to span a full seasonal cycle, matching the reference dataset's year-round composition. A short window (e.g. 14 days) picks up one season only and looks like drift even when nothing is actually wrong — see reports/monitoring notes from 2026-07-02.
-            "--log-to-mlflow"
+            "--log-to-mlflow --push-to-gateway"
         ),
         execution_timeout=timedelta(minutes=30),
     )

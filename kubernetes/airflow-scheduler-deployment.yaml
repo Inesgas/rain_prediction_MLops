@@ -7,7 +7,7 @@ metadata:
     app: rain-prediction-airflow
     component: scheduler
 spec:
-  replicas: 2
+  replicas: 1
   revisionHistoryLimit: 3
   selector:
     matchLabels:

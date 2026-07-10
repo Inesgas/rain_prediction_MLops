@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Instanziieren Sie HTTPBasic für die Swagger-UI-Anmeldung
-security = HTTPBasic()
+security = HTTPBasic(auto_error=False)
 
 # ========== BENUTZER & ROLLEN (CRUCIAL FIX) ==========
 USERS = {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import datetime, timezone
 import pandas as pd
 from evidently import Report
@@ -60,6 +61,45 @@ def extract_summary(snapshot) -> dict:
     return summary
 
 
+def push_summary_to_gateway(summary: dict) -> None:
+    """
+    Pushes drift summary metrics to the Prometheus Pushgateway so that
+    Grafana can alert on drift results from this batch job.
+    """
+    from prometheus_client import CollectorRegistry, Gauge, push_to_gateway
+
+    gateway_url = os.environ.get("PUSHGATEWAY_URL", "pushgateway:9091")
+    registry = CollectorRegistry()
+
+    dataset_drift_gauge = Gauge(
+        "rain_dataset_drift_detected",
+        "Whether dataset-level drift was detected in the latest check (1=drift, 0=no drift)",
+        registry=registry,
+    )
+    drifted_columns_count_gauge = Gauge(
+        "rain_drifted_columns_count",
+        "Number of columns flagged as drifted in the latest check",
+        registry=registry,
+    )
+    drifted_columns_share_gauge = Gauge(
+        "rain_drifted_columns_share",
+        "Share of columns flagged as drifted in the latest check",
+        registry=registry,
+    )
+    last_run_timestamp_gauge = Gauge(
+        "rain_drift_check_last_run_timestamp_seconds",
+        "Unix timestamp of the last completed drift check",
+        registry=registry,
+    )
+
+    dataset_drift_gauge.set(1 if summary.get("dataset_drift") else 0)
+    drifted_columns_count_gauge.set(summary.get("number_of_drifted_columns", 0))
+    drifted_columns_share_gauge.set(summary.get("share_of_drifted_columns", 0.0))
+    last_run_timestamp_gauge.set(datetime.now(timezone.utc).timestamp())
+
+    push_to_gateway(gateway_url, job="drift_monitoring", registry=registry)
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     # 365 days by default so the current window spans a full seasonal cycle,
@@ -68,6 +108,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     # nothing is actually wrong — see reports/monitoring notes from 2026-07-02.
     parser.add_argument("--days-back", type=int, default=365)
     parser.add_argument("--log-to-mlflow", action="store_true")
+    parser.add_argument("--push-to-gateway", action="store_true")
     return parser
 
 
@@ -99,6 +140,9 @@ def main() -> None:
             mlflow.end_run()
         with mlflow.start_run(run_name=f"drift_check_{timestamp}"):
             mlflow.log_artifact(str(html_path))
+
+    if args.push_to_gateway:
+        push_summary_to_gateway(summary)
 
 
 if __name__ == "__main__":

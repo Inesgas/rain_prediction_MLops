@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-gateway
+  namespace: rain-prediction
+  labels:
+    app: nginx-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-gateway
+  template:
+    metadata:
+      labels:
+        app: nginx-gateway
+    spec:
+      containers:
+        - name: nginx
+          image: rain_prediction_mlops-nginx:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              name: http
+            - containerPort: 443
+              name: https
+          volumeMounts:
+            - name: tls-and-auth
+              mountPath: /etc/nginx/certs/nginx.crt
+              subPath: nginx.crt
+            - name: tls-and-auth
+              mountPath: /etc/nginx/certs/nginx.key
+              subPath: nginx.key
+            - name: tls-and-auth
+              mountPath: /etc/nginx/.htpasswd
+              subPath: .htpasswd
+      volumes:
+        - name: tls-and-auth
+          secret:
+            secretName: nginx-tls-and-auth

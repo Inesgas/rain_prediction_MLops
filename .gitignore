@@ -66,6 +66,7 @@ airflow/standalone_admin_password.txt
 # Local secrets and certificates
 nginx/certs/*.crt
 nginx/certs/*.key
+kubernetes/fastapi-secret.yaml
 .env
 .env.local
 .env.*.local

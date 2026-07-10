@@ -1,3 +1,6 @@
+# NOTE: This docker-compose.yml is for local development/testing only.
+# The production/deployed setup runs via Kubernetes manifests in ./kubernetes/
+
 services:
   fastapi:
     build:

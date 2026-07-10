@@ -21,6 +21,16 @@ spec:
       labels:
         app: rain-prediction-api
     spec:
+      initContainers:
+        - name: model-fetcher
+          image: rain_prediction_mlops-model-fetcher:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: dagshub-credentials
+          volumeMounts:
+            - name: model-volume
+              mountPath: /repo/models
       containers:
         - name: fastapi
           image: rain_prediction_mlops-fastapi:latest
@@ -28,6 +38,9 @@ spec:
           ports:
             - containerPort: 8502
               name: http
+          volumeMounts:
+            - name: model-volume
+              mountPath: /app/models
           readinessProbe:
             httpGet:
               path: /health
@@ -47,3 +60,6 @@ spec:
             limits:
               cpu: "1"
               memory: 1Gi
+      volumes:
+        - name: model-volume
+          emptyDir: {}
