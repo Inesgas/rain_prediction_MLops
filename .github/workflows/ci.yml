@@ -32,6 +32,7 @@ jobs:
             src/versioning/dvc_versioning.py \
             src/versioning/mlflow_tracking.py \
             src/prediction_api/main.py \
+            tests/test_airflow_automation.py \
             tests/test_dependency_pins.py \
             tests/test_mlflow_tracking.py \
             tests/test_prediction_api_contract.py \
@@ -41,7 +42,7 @@ jobs:
         run: python -m src.versioning.mlflow_tracking log-model --dry-run --no-register-model --run-id ci
 
       - name: FastAPI contract tests
-        run: python -m pytest tests/test_drift_report.py tests/test_dependency_pins.py tests/test_mlflow_tracking.py tests/test_prediction_api_contract.py
+        run: python -m pytest tests/test_airflow_automation.py tests/test_drift_report.py tests/test_dependency_pins.py tests/test_mlflow_tracking.py tests/test_prediction_api_contract.py
 
   docker-build:
     runs-on: ubuntu-latest

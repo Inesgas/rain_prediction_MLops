@@ -21,7 +21,7 @@ spec:
     spec:
       initContainers:
         - name: seed-project-workspace
-          image: rain_prediction_mlops-airflow:production-dvc
+          image: rain_prediction_mlops-airflow:inesgas-airflow-20260713
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsUser: 0
@@ -56,7 +56,7 @@ spec:
             - name: airflow-logs
               mountPath: /opt/airflow/logs
         - name: wait-for-migrations
-          image: rain_prediction_mlops-airflow:production-dvc
+          image: rain_prediction_mlops-airflow:inesgas-airflow-20260713
           imagePullPolicy: IfNotPresent
           command: ["bash", "-c"]
           args:
@@ -68,7 +68,7 @@ spec:
                 name: airflow-secret
       containers:
         - name: webserver
-          image: rain_prediction_mlops-airflow:production-dvc
+          image: rain_prediction_mlops-airflow:inesgas-airflow-20260713
           imagePullPolicy: IfNotPresent
           command: ["bash", "-c"]
           args:
@@ -85,16 +85,18 @@ spec:
             httpGet:
               path: /airflow/health
               port: 8080
-            initialDelaySeconds: 45
+            initialDelaySeconds: 120
             periodSeconds: 20
             timeoutSeconds: 10
+            failureThreshold: 12
           livenessProbe:
             httpGet:
               path: /airflow/health
               port: 8080
-            initialDelaySeconds: 90
+            initialDelaySeconds: 240
             periodSeconds: 30
             timeoutSeconds: 10
+            failureThreshold: 5
           resources:
             requests:
               cpu: 200m
