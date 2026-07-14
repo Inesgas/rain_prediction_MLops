@@ -2,7 +2,7 @@
 
 <p align="center">
   <b>Production-style MLOps for Australian rainfall prediction</b><br>
-  FastAPI · Nginx · Airflow · MLflow · DVC · Docker Compose · Kubernetes
+  FastAPI | Nginx | Airflow | MLflow | DVC | Docker Compose | Kubernetes
 </p>
 
 <p align="center">
@@ -25,16 +25,17 @@
 - [Repository Layout](#repository-layout)
 - [Served Model](#served-model)
 - [API](#api)
-- [Quick Start](#quick-start)
+- [Environment and Reproducibility Context](#environment-and-reproducibility-context)
 - [Docker Compose](#docker-compose)
 - [Kubernetes](#kubernetes)
 - [Airflow Pipelines](#airflow-pipelines)
 - [MLflow and DVC](#mlflow-and-dvc)
 - [Data Ingestion](#data-ingestion)
-- [Local Credentials](#local-credentials)
-- [Troubleshooting](#troubleshooting)
-- [Security Notes](#security-notes)
+- [Access and Security Context](#access-and-security-context)
+- [Resolved Integration Issues](#resolved-integration-issues)
+- [Security Handling](#security-handling)
 - [Project Notes](#project-notes)
+- [Team-Owned Report Areas](#team-owned-report-areas)
 
 ***
 
@@ -188,39 +189,39 @@ Final validation confirmed:
 
 ```text
 rain_prediction_mlops/
-├── .github/
-│   └── workflows/
-├── data/
-│   ├── cleaned/
-│   ├── preprocessed/
-│   ├── raw/
-│   └── sample/
-├── models/
-│   └── final_winner/
-├── notebooks/
-├── references/
-├── reports/
-│   └── figures/
-├── src/
-│   ├── config/
-│   ├── data/
-│   ├── docker/
-│   │   ├── data-download-prep/
-│   │   ├── database/
-│   │   ├── frontend/
-│   │   ├── gateway/
-│   │   ├── initialization/
-│   │   ├── prediction/
-│   │   ├── scoring/
-│   │   ├── testing/
-│   │   ├── training/
-│   │   └── users/
-│   ├── features/
-│   ├── models/
-│   │   └── experiments/
-│   ├── script/
-│   └── utils/
-└── requirements.txt
+|-- .github/
+|   `-- workflows/
+|-- data/
+|   |-- cleaned/
+|   |-- preprocessed/
+|   |-- raw/
+|   `-- sample/
+|-- models/
+|   `-- final_winner/
+|-- notebooks/
+|-- references/
+|-- reports/
+|   `-- figures/
+|-- src/
+|   |-- config/
+|   |-- data/
+|   |-- docker/
+|   |   |-- data-download-prep/
+|   |   |-- database/
+|   |   |-- frontend/
+|   |   |-- gateway/
+|   |   |-- initialization/
+|   |   |-- prediction/
+|   |   |-- scoring/
+|   |   |-- testing/
+|   |   |-- training/
+|   |   `-- users/
+|   |-- features/
+|   |-- models/
+|   |   `-- experiments/
+|   |-- script/
+|   `-- utils/
+`-- requirements.txt
 ```
 
 ### Key directories
@@ -272,94 +273,61 @@ The final model metadata also stores the feature list, categorical feature list,
 
 ## API
 
+The API layer is the serving boundary for the trained model.
+It exposes the model health, model metadata, and prediction behavior expected by the rest of the stack.
+The detailed FastAPI and Nginx gateway implementation remains the team-owned API/gateway section, while this report records how the MLOps layer depends on it.
+
 ### Endpoints
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| GET | `/health` | Service status, API version, loaded model |
-| GET | `/model-info` | Model metadata, threshold, metrics, required features |
-| POST | `/predict` | Rain / no-rain prediction with class probabilities |
+| GET | `/health` | Public service health and model-loaded status |
+| GET | `/locations` | Public list of supported WeatherAUS locations |
+| POST | `/predict` | Authenticated single-row rain prediction with confidence |
+| POST | `/predict/batch` | Authenticated batch prediction with prediction-log writing |
+| GET | `/model/info` | Admin model metadata, feature count, and artifact path |
+| GET | `/model/features` | Admin feature contract and numeric fill values |
+| GET | `/metrics` | Prometheus metrics exposed by the API service |
 
-### Example workflow
+### API role in the MLOps system
 
-1. Start the local stack.
-2. Check service health.
-3. Send a prediction payload.
-
-```bash
-# VM Bash
-curl http://localhost:8502/health
-```
+| Integration point | Role |
+|-------------------|------|
+| Docker Compose | Runs the API service alongside Airflow, MLflow, monitoring, and the gateway |
+| Kubernetes | Runs the API as a 3-replica deployment with HPA support |
+| Airflow | Uses the API health endpoint as part of the production validation path |
+| DVC/model artifacts | The API loads the DVC-tracked winner model and metadata contract |
+| Monitoring | Prediction traffic and API metrics feed the monitoring layer |
 
 ***
 
-## Quick Start
+## Environment and Reproducibility Context
 
-### 1. Clone the repository
+The project was structured to be reproducible across a local workstation, a VM, and a local Kubernetes cluster.
+Python dependency files, Dockerfiles, DVC pointers, Airflow DAGs, and Kubernetes manifests work together so that the same model artifacts and workflow can be inspected outside the original notebook environment.
 
-```bash
-# VM Bash
-git clone <your-repository-url>
-cd rain_prediction_mlops
-```
+The reproducibility design includes:
 
-### 2. Create and activate a virtual environment
+| Component | Reproducibility role |
+|-----------|----------------------|
+| `.env.example` | Documents the environment variables expected by local services without storing real secrets |
+| `requirements.txt` | Captures shared Python dependencies for data science and validation code |
+| Dockerfiles | Package API, Airflow, model-fetcher, gateway, frontend, training, and testing runtimes |
+| DVC pointers | Keep raw data and model artifacts reproducible without committing large binary files to Git |
+| Airflow DAGs | Preserve the production order of ingestion, training, versioning, logging, and monitoring |
+| Kubernetes manifests | Describe the production-style runtime topology and persistent state |
 
-```bash
-# VM Bash
-python -m venv .venv
-source .venv/bin/activate
-```
-
-### 3. Install dependencies
-
-```bash
-# VM Bash
-pip install -r requirements.txt
-```
-
-### 4. Create `.env`
-
-```bash
-# VM Bash
-cp .env.example .env
-```
-
-Example values:
-
-```env
-MLFLOW_TRACKING_URI=https://dagshub.com/Inesgas/rain_prediction_MLops.mlflow
-MLFLOW_TRACKING_USERNAME=<your-dagshub-username>
-MLFLOW_TRACKING_PASSWORD=<your-dagshub-token>
-API_USERS=<username1:role1,username2:role2,...>
-```
-
-### 5. Load environment variables safely
-
-```bash
-# VM Bash
-set -a
-source .env
-set +a
-```
-
-> Do **not** use `export $(grep -v '^#' .env | xargs)` because unquoted values may break parsing.
+The latest validation work confirmed that the committed raw dataset pointer and winner model pointer are present in the DagsHub DVC remote.
+This keeps the merged Git state consistent with the external artifact store.
 
 ***
 
 ## Docker Compose
 
-Docker Compose is the fastest way to run the full local stack for development, testing, monitoring, and API access.
+Docker Compose is the local integration layer.
+It brings the project services together on one machine so the team can validate interactions before moving to Kubernetes.
 
-### Start the stack
-
-```bash
-# VM Bash
-docker compose up -d --build
-docker compose ps
-```
-
-### Main local URLs
+### Integrated services
 
 | Service | URL |
 |---------|-----|
@@ -369,26 +337,19 @@ docker compose ps
 | Prometheus | `http://localhost:9090` |
 | Grafana | `http://localhost:3000` |
 
-### Scale FastAPI behind Nginx
+### Docker Compose role in the project
 
-```bash
-# VM Bash
-docker compose up -d --scale fastapi=3
-```
+| Area | What Docker Compose demonstrates |
+|------|----------------------------------|
+| FastAPI serving | The model API runs with the mounted model artifact and health checks |
+| Airflow automation | Airflow runs the same DAGs used in Kubernetes validation |
+| MLflow tracking | Local model logging is available without relying on hosted credentials |
+| Pushgateway | Batch drift metrics have a local metrics target |
+| Prediction traffic | Synthetic prediction traffic keeps monitoring dashboards populated |
+| Gateway/dashboard integration | Nginx, Prometheus, and Grafana are integrated for team-owned gateway and monitoring work |
 
-### Prediction traffic generator
-
-The stack includes `prediction-traffic`, which periodically sends valid predictions so monitoring dashboards display data immediately.
-
-```bash
-# VM Bash
-docker compose logs -f prediction-traffic
-```
-
-```bash
-# VM Bash
-docker compose stop prediction-traffic
-```
+During the final review, Docker Airflow, FastAPI, MLflow, Pushgateway, Grafana, node-exporter, and prediction traffic were running.
+Nginx and Prometheus required teammate-owned local mount cleanup, so their detailed readiness belongs to the API/gateway and monitoring owners.
 
 ***
 
@@ -433,23 +394,23 @@ This prevents stale PVC contents from hiding new DAG support code after a rollou
 ### Portability design
 
 The Kubernetes manifests use local image names for the Airflow, FastAPI, and model-fetcher containers.
-For a fresh VM or another local Kubernetes cluster, the important portability requirements are:
+The portability assumptions recorded during validation were:
 
-- DVC-tracked raw data and model artifacts must exist locally before image build or must be available through the DVC remote.
-- The `dagshub-credentials` secret must exist in the `rain-prediction` namespace so the model-fetcher init container can pull the model artifact.
-- Non-Docker-Desktop clusters must use image loading or registry-published image tags.
+- DVC-tracked raw data and model artifacts are available through the DVC remote.
+- The `dagshub-credentials` secret exists in the `rain-prediction` namespace so the model-fetcher init container can pull the model artifact.
+- Non-Docker-Desktop clusters need image loading or registry-published image tags because the manifests reference local image names.
 - The Airflow image tag used by the manifests is `rain_prediction_mlops-airflow:inesgas-airflow-20260713`.
 
 ### Validated Kubernetes state
 
 The Kubernetes layer was checked after the Airflow/DVC fixes.
-The server-side manifest dry-run passed, pods were ready, PVCs were bound, and the missing DagsHub secret was created.
+The server-side manifest dry-run passed, pods were ready, PVCs were bound, and the DagsHub secret was present after validation.
 
 Validated runtime state:
 
 | Check | Result |
 |-------|--------|
-| Manifest validation | `kubectl apply -k kubernetes --dry-run=server` passed |
+| Manifest validation | Server-side kustomize dry-run passed |
 | Airflow scheduler | `1/1` ready |
 | Airflow webserver | `3/3` ready |
 | Airflow workers | `2/2` ready, HPA configured for 2-3 |
@@ -485,7 +446,7 @@ The DAGs are unpaused, scheduled, and visible in both Docker Airflow and Kuberne
 The end-to-end DAG is the main production storyline.
 It starts from weather data extraction and finishes with refreshed model artifacts and validation outputs.
 
-What the DAG does:
+Workflow behavior:
 
 1. Extracts or updates `data/raw/weatherAUS.csv`.
 2. Applies append/upsert logic using `Date` and `Location` so incoming rows can update existing weather observations without blindly duplicating records.
@@ -502,7 +463,7 @@ What the DAG does:
 This DAG focuses on the versioning and audit trail around the training pipeline.
 It records the state of the input data, the output model, and the model metadata so that a training run can be traced after it finishes.
 
-Pipeline steps:
+Workflow behavior:
 
 1. Extract or validate `data/raw/weatherAUS.csv`
 2. Update the local DVC pointer for the raw dataset
@@ -519,7 +480,7 @@ Pipeline steps:
 This DAG runs an Evidently data drift check between the training reference dataset (`data/monitoring/reference_dataset.csv`, written by `train_winner.py` on every training run) and a rolling window of `data/preprocessed/rain_model_dataset_aligned.csv`.
 The monitoring window was set to cover a full seasonal cycle because short windows can falsely report complete drift when they compare one season against a year-round reference.
 
-Pipeline steps:
+Workflow behavior:
 
 1. Verify the DVC-tracked reference dataset is present locally
 2. Run `src.monitoring.drift_report` over the configured window and log the HTML report to MLflow
@@ -548,7 +509,7 @@ The Airflow layer was validated in both Docker Compose and Kubernetes.
 
 ### DVC
 
-DVC is used because the project contains large assets that should not be stored directly in Git.
+DVC is used because the project contains large assets that are kept outside Git.
 Git stores the `.dvc` pointer files, while DVC stores the actual raw data and model objects in the configured DagsHub remote.
 
 Configured remote:
@@ -568,7 +529,8 @@ Tracked production assets:
 
 The latest committed raw data pointer and winner model pointer were pushed to the remote before merge.
 This means a fresh machine can resolve the committed raw/model artifacts from DagsHub.
-The local training workflow can also produce a newer `data/monitoring/reference_dataset.csv`; that file should only receive a new DVC pointer after the object has been successfully uploaded to the remote.
+The local training workflow can also produce a newer `data/monitoring/reference_dataset.csv`.
+During the latest validation, a newer local reference dataset was produced but its remote upload did not complete, so the committed pointer intentionally remained on the last remote-synced object.
 
 ### MLflow
 
@@ -641,9 +603,7 @@ Each successful training run writes:
 
 ***
 
-## Local Credentials
-
-> Replace placeholder credentials before shared or production use.
+## Access and Security Context
 
 | Service | Deployment | URL | Username | Password | Notes |
 |---------|------------|-----|----------|----------|-------|
@@ -655,60 +615,39 @@ Each successful training run writes:
 | Prometheus | Docker Compose | `http://localhost:9090` | none | none | Local monitoring only |
 | Nginx gateway | Docker Compose | `https://localhost` | `andrey`, `ines`, `gunter`, `admin` | stored as hashes | See `nginx/.htpasswd` |
 
-### Reset Kubernetes Airflow password
-
-```bash
-# VM Bash
-kubectl exec -n rain-prediction deployment/rain-prediction-airflow-webserver -- \
-airflow users reset-password -u admin -p "<new-password>"
-```
+The project separates committed configuration from local secrets.
+`.env`, `.dvc/config.local`, TLS certificates, and gateway password hashes are local runtime material and are not part of the committed model or orchestration report.
 
 ***
 
-## Troubleshooting
+## Resolved Integration Issues
 
-### Common issues
+Several integration problems were found and resolved during the production-readiness work.
+This section records the work behind the final state.
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `ResolutionImpossible` for `mlflow-skinny` | Conflicting version pins | Keep only the pin matching the Dockerized MLflow version |
-| `docker compose build airflow` fails with the same dependency conflict | Duplicate `mlflow-skinny` pin in Airflow requirements | Remove the conflicting duplicate pin |
-| `dvc pull` or `dvc status` reports missing files | DVC remote credentials not configured | Configure DagsHub credentials in `.dvc/config.local` |
-| MLflow connection errors to DagsHub | Missing `https://` scheme | Use the full tracking URI with `https://` |
-| Airflow `PermissionError` on mounted paths | UID mismatch between host and container | Set `AIRFLOW_UID=$(id -u)` and recreate containers |
-| `AirflowTimetableInvalid` for schedule | Stale exported environment variable overrides `.env` | `unset MODEL_VERSIONING_SCHEDULE` before startup |
-| Airflow run not visible on DagsHub | Airflow still points to local MLflow | Set `AIRFLOW_MLFLOW_TRACKING_URI` explicitly |
-| `ModuleNotFoundError: No module named 'evidently'` in `run_drift_report` | `evidently`/`plotly` missing from the Airflow image's requirements file | Add `evidently==0.7.21` and `plotly==5.24.1` to `docker/airflow/airflow_requirements.txt` and `src/docker/airflow/airflow_requirements.txt`, then rebuild the Airflow image |
-| Airflow image build fails with `ResolutionImpossible` on `cryptography` | `evidently` needs `cryptography>=43.0.1`, which conflicts with the Airflow 2.10.5 constraints file (`cryptography==42.0.8`) | Install `evidently`/`plotly` in a separate `pip install` step without `--constraint`, see `docker/airflow/airflow.Dockerfile` |
-| `drift_monitoring` reports `dataset_drift: true` on every run, 100% of columns | Comparison window too short (e.g. 14 days) captures one season only, while the reference dataset spans a full year | Use `--days-back 365` (the default) so the window covers a full seasonal cycle |
-
-
-### Helpful diagnostics
-
-```bash
-# VM Bash
-docker exec airflow id
-docker exec airflow env | grep -E 'MLFLOW|MODEL_VERSIONING'
-```
-
-### DVC remote authentication example
-
-```bash
-# VM Bash
-dvc remote modify origin --local auth basic
-dvc remote modify origin --local user <dagshub-username>
-dvc remote modify origin --local password <dagshub-token>
-```
+| Area | Issue found | Resolution |
+|------|-------------|------------|
+| Airflow scheduling | End-to-end automation and drift monitoring were not fully scheduled in the earlier configuration | Airflow schedule variables were aligned so ingestion, E2E training/versioning, and drift monitoring run as automated DAGs |
+| Airflow dependencies | Drift monitoring required Evidently, Plotly, and Prometheus client support in the Airflow image | Airflow dependency pins and Dockerfile installation order were aligned with Airflow 2.10.5 constraints |
+| MLflow target | Docker Airflow could point to hosted DagsHub MLflow and fail without credentials | Docker Airflow now uses local MLflow by default through `AIRFLOW_MLFLOW_TRACKING_URI` |
+| Kubernetes scheduler | Multiple Airflow schedulers caused duplicate serialized DAG writes and instability | Kubernetes Airflow scheduler was reduced to one stable replica |
+| Kubernetes PVC source refresh | PVC-backed Airflow pods could keep stale project code after image rebuilds | Airflow init containers now refresh source code from the image into the PVC-backed workspace |
+| Kubernetes Pushgateway | Drift DAG expected Pushgateway, but the Kubernetes stack did not include it earlier | Pushgateway deployment and service are included in `kubernetes/kustomization.yaml` |
+| Kubernetes credentials | The model-fetcher init container needed DagsHub credentials | `dagshub-credentials` was created in the `rain-prediction` namespace during validation |
+| DVC artifact consistency | Updated raw data/model pointers would break other machines if objects were not uploaded | The new raw dataset and winner model objects were pushed to the DagsHub DVC remote before merge |
+| Drift reference artifact | A newer local reference dataset existed, but its DVC upload timed out | Its pointer was intentionally not committed, preserving a pullable merged state |
 
 ***
 
-## Security Notes
+## Security Handling
 
-- `.env` is git-ignored and must never be committed
-- Only `.env.example` with placeholder values should be tracked
-- Replace local default credentials before shared use
-- Store DVC credentials in `.dvc/config.local`, not in versioned files
-- Plaintext passwords cannot be recovered from `nginx/.htpasswd`
+| Security area | Project handling |
+|---------------|------------------|
+| Environment variables | `.env` is git-ignored; `.env.example` records placeholder structure only |
+| DVC credentials | Local authentication material lives in `.dvc/config.local`, outside version control |
+| Gateway passwords | Nginx password material is represented by hashes in `nginx/.htpasswd` |
+| Shared defaults | Local demonstration credentials remain visible in compose/manifests and are separate from private secrets |
+| Password recovery | Plaintext source values are not recoverable from `nginx/.htpasswd` hashes |
 
 ***
 
@@ -734,11 +673,14 @@ The integration work extends orchestration, monitoring, Docker Compose, and Kube
 
 ***
 
-## Suggested Next Improvements
-- Add real CI status badges from GitHub Actions
-- Add an architecture diagram in `docs/`
-- Add example request and response payloads for `/predict`
-- Add a `Makefile` for common workflows
-- Add a `Contributing` section for onboarding new collaborators
-- Fail the `drift_monitoring` DAG task when `dataset_drift` is `true`, instead of only logging it
-- Point `drift_monitoring`'s current-window comparison at a continuously updated data source instead of the static `rain_model_dataset_aligned.csv`
+## Team-Owned Report Areas
+
+The current report covers the data science foundation, DVC, Airflow, Kubernetes, and the data-to-training path.
+The remaining report areas belong to the team owners of those components:
+
+| Owner area | Report scope |
+|------------|--------------|
+| FastAPI | Detailed API design, authentication behavior, request/response contract, and model-serving decisions |
+| Nginx gateway | Gateway security, password-hash handling, TLS setup, protected routes, and rate limiting |
+| Prometheus and Grafana | Monitoring architecture, dashboard panels, metric sources, and alerting choices |
+| Presentation | Final Streamlit presentation and speaker script kept outside the README report |
