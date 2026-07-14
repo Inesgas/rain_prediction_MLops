@@ -12,8 +12,8 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: rain-prediction-airflow
@@ -27,7 +27,7 @@ spec:
       terminationGracePeriodSeconds: 1800
       initContainers:
         - name: seed-project-workspace
-          image: rain_prediction_mlops-airflow:production-dvc
+          image: rain_prediction_mlops-airflow:inesgas-airflow-20260713
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsUser: 0
@@ -62,7 +62,7 @@ spec:
             - name: airflow-logs
               mountPath: /opt/airflow/logs
         - name: wait-for-migrations
-          image: rain_prediction_mlops-airflow:production-dvc
+          image: rain_prediction_mlops-airflow:inesgas-airflow-20260713
           imagePullPolicy: IfNotPresent
           command: ["bash", "-c"]
           args:
@@ -74,7 +74,7 @@ spec:
                 name: airflow-secret
       containers:
         - name: worker
-          image: rain_prediction_mlops-airflow:production-dvc
+          image: rain_prediction_mlops-airflow:inesgas-airflow-20260713
           imagePullPolicy: IfNotPresent
           command: ["bash", "-c"]
           args:

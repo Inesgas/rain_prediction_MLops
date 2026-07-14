@@ -141,9 +141,9 @@ The Kubernetes Airflow login is:
 
 | Username | Password |
 |---|---|
-| `admin` | `rain-airflow-admin-change-me` |
+| `admin` | `airflow` |
 
-This password is a local placeholder stored in `kubernetes/airflow-secret.yaml`. It is intentionally different from the Docker Compose Airflow password because Kubernetes uses a Secret-driven production-style setup. Shared environments use a team-managed secret instead of this local placeholder.
+This password is a local placeholder stored in `kubernetes/airflow-secret.yaml`. Shared environments use a team-managed secret instead of this local placeholder.
 
 The Kubernetes bundle is listed in:
 

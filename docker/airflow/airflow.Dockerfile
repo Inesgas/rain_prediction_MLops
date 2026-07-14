@@ -13,10 +13,10 @@ USER airflow
 COPY docker/airflow/airflow_requirements.txt /tmp/airflow_requirements.txt
 
 # evidently pulls in cryptography>=43.0.1, which conflicts with the Airflow
-# 2.10.5 constraints file (cryptography==42.0.8). Install it separately,
-# outside the constraint, so the two pins don't collide in one resolver pass.
-RUN grep -e '^evidently==' -e '^plotly==' /tmp/airflow_requirements.txt > /tmp/evidently_requirements.txt \
-    && grep -v -e '^evidently==' -e '^plotly==' /tmp/airflow_requirements.txt > /tmp/airflow_requirements_core.txt \
+# 2.10.5 constraints file (cryptography==42.0.8). Install it separately with
+# bounds that still satisfy Airflow's provider and pyOpenSSL stack.
+RUN grep -E '^(evidently==|plotly==|cryptography[<=>]|cffi[<=>])' /tmp/airflow_requirements.txt > /tmp/evidently_requirements.txt \
+    && grep -v -E '^(evidently==|plotly==|cryptography[<=>]|cffi[<=>])' /tmp/airflow_requirements.txt > /tmp/airflow_requirements_core.txt \
     && python -m pip install --no-cache-dir \
        --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt" \
        -r /tmp/airflow_requirements_core.txt \

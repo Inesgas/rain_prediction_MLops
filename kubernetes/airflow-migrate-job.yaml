@@ -1,10 +1,11 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: airflow-migrate
+  name: airflow-migrate-inesgas-20260713
   namespace: rain-prediction
 spec:
   backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
   template:
     metadata:
       labels:
@@ -26,7 +27,7 @@ spec:
                   name: airflow-secret
                   key: AIRFLOW_DB_USER
         - name: seed-project-workspace
-          image: rain_prediction_mlops-airflow:production-dvc
+          image: rain_prediction_mlops-airflow:inesgas-airflow-20260713
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsUser: 0
@@ -62,7 +63,7 @@ spec:
               mountPath: /opt/airflow/logs
       containers:
         - name: migrate
-          image: rain_prediction_mlops-airflow:production-dvc
+          image: rain_prediction_mlops-airflow:inesgas-airflow-20260713
           imagePullPolicy: IfNotPresent
           command: ["bash", "-c"]
           args:

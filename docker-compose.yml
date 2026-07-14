@@ -65,6 +65,13 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
 
+  pushgateway:
+    image: prom/pushgateway:latest
+    container_name: pushgateway
+    restart: unless-stopped
+    expose:
+      - "9091"
+
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
@@ -149,9 +156,11 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
       AIRFLOW_PROJECT_DIR: /opt/airflow/project
-      MLOPS_E2E_SCHEDULE: ""
-      MODEL_VERSIONING_SCHEDULE: "${MODEL_VERSIONING_SCHEDULE-0 */6 * * *}"
-      MLFLOW_TRACKING_URI: https://dagshub.com/Inesgas/rain_prediction_MLops.mlflow
+      MLOPS_E2E_SCHEDULE: "${MLOPS_E2E_SCHEDULE:-0 6 * * *}"
+      MODEL_VERSIONING_SCHEDULE: "${MODEL_VERSIONING_SCHEDULE:-0 4 * * *}"
+      DRIFT_MONITORING_SCHEDULE: "${DRIFT_MONITORING_SCHEDULE:-0 7 * * *}"
+      PUSHGATEWAY_URL: pushgateway:9091
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
       MLFLOW_EXPERIMENT_NAME: ${MLFLOW_EXPERIMENT_NAME:-rain_prediction_winner}
       MLFLOW_REGISTERED_MODEL_NAME: ${MLFLOW_REGISTERED_MODEL_NAME:-rain_prediction_final_winner}
       MLFLOW_REGISTER_MODEL: ${MLFLOW_REGISTER_MODEL:-true}
@@ -162,6 +171,8 @@ services:
     depends_on:
       mlflow:
         condition: service_healthy
+      pushgateway:
+        condition: service_started
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./:/opt/airflow/project 
