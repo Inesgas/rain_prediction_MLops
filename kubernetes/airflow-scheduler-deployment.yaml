@@ -7,7 +7,7 @@ metadata:
     app: rain-prediction-airflow
     component: scheduler
 spec:
-  replicas: 3
+  replicas: 1
   revisionHistoryLimit: 3
   selector:
     matchLabels:
@@ -84,9 +84,9 @@ spec:
                 - bash
                 - -c
                 - airflow jobs check --job-type SchedulerJob --hostname "$HOSTNAME"
-            initialDelaySeconds: 180
-            periodSeconds: 30
-            timeoutSeconds: 60
+            initialDelaySeconds: 300
+            periodSeconds: 60
+            timeoutSeconds: 120
             failureThreshold: 5
           resources:
             requests:

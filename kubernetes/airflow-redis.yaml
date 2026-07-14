@@ -51,14 +51,18 @@ spec:
                 - redis-cli -a "$AIRFLOW_REDIS_PASSWORD" ping | grep PONG
             initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
           livenessProbe:
             exec:
               command:
                 - sh
                 - -c
                 - redis-cli -a "$AIRFLOW_REDIS_PASSWORD" ping | grep PONG
-            initialDelaySeconds: 30
+            initialDelaySeconds: 60
             periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
           resources:
             requests:
               cpu: 100m
