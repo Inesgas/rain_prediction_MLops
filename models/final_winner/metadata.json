@@ -179,8 +179,8 @@
     "temp_day_diff": 4.4,
     "humidity_day_diff": -17.0,
     "pressure_day_diff": -2.6000000000000227,
-    "dewpoint_9am": 9.869170300183331,
-    "dewpoint_spread_9am": 5.591821120384251,
+    "dewpoint_9am": 9.867108166602726,
+    "dewpoint_spread_9am": 5.591829544075214,
     "dewpoint_3pm": 9.256531592379842,
     "dewpoint_spread_3pm": 10.237657892819566,
     "year_cycle_sin": -0.023651127245231586,
@@ -205,9 +205,9 @@
     "rainfall_zone_Winter dominant": 0.0,
     "temp_range": 10.499999999999998,
     "humidity_temp_3pm_interaction": 9.646,
-    "pressure_humidity_3pm_ratio": 19.230188679245284,
-    "cloud_humidity_3pm_interaction": 205.30242027070872,
-    "moisture_stability_3pm": 492.59483156955184,
+    "pressure_humidity_3pm_ratio": 19.23042576837409,
+    "cloud_humidity_3pm_interaction": 205.49304318623942,
+    "moisture_stability_3pm": 492.815217061409,
     "humidity_rising_fast": 0.0,
     "warming_day": 1.0
   },
@@ -222,18 +222,18 @@
     "random_strength": 0.31203728088487304
   },
   "metrics": {
-    "roc_auc": 0.8935301004118402,
-    "accuracy": 0.8435025452488688,
-    "f1": 0.6845742785892411,
-    "precision": 0.6382356848678092,
-    "recall": 0.7381684081130916,
+    "roc_auc": 0.8945360181811699,
+    "accuracy": 0.8432696045517193,
+    "f1": 0.6838691282343716,
+    "precision": 0.6385782747603834,
+    "recall": 0.7360748810802517,
     "threshold": 0.5800000000000003,
-    "train_rows": 113448,
-    "test_rows": 28288,
-    "test_start_date": "2015-12-03",
-    "test_end_date": "2026-07-11"
+    "train_rows": 113488,
+    "test_rows": 28297,
+    "test_start_date": "2015-12-04",
+    "test_end_date": "2026-07-12"
   },
-  "created_at_utc": "2026-07-13T09:39:45.139159+00:00",
+  "created_at_utc": "2026-07-14T08:50:13.194422+00:00",
   "artifact_path": "models/final_winner/winner_model.joblib",
   "config_path": "models/final_winner/model_config.json"
 }
