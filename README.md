@@ -168,6 +168,18 @@ The production layer focused on three responsibilities:
 | Airflow | Four DAGs coordinate ingestion, retraining, DVC versioning, and integration checks around model logging and drift monitoring. |
 | Kubernetes | Airflow, Postgres, Redis, Pushgateway, PVCs, HPAs, PDBs, and service reachability are deployed through `kubernetes/kustomization.yaml`. |
 
+The work was not only a packaging step around a trained model.
+The project was reorganized so that each production action leaves an auditable trace:
+
+| Process area | Work behind the final state |
+|--------------|-----------------------------|
+| Raw data control | Incoming rows are normalized, validated, merged by `Date` and `Location`, and recorded through extraction manifests. |
+| Artifact versioning | Raw data, model artifacts, feature metadata, sample input, and DVC status are recorded before and after training. |
+| Automated orchestration | Airflow tasks were split into extraction, DVC pointer updates, local artifact checks, freshness checks, training, output snapshots, tracking handoff, API contract validation, and status recording. |
+| Runtime separation | Kubernetes separates Airflow webserver, scheduler, workers, Postgres, Redis, Pushgateway, and service endpoints instead of running everything as one local process. |
+| Portability | Docker and Kubernetes share the same schedules, environment variables, DVC targets, and model artifact paths so the workflow behaves consistently across local and cluster runtimes. |
+| Safety of automation | DAGs update local artifacts and reports, but remote DVC/Git publishing remains a deliberate merge-time action. |
+
 Final validation confirmed:
 
 | Check | Result |
@@ -357,7 +369,27 @@ Kubernetes is the production-style deployment layer for the project.
 The Kubernetes work focused on making Airflow and the model-serving stack run as separated services with persistent state, predictable scheduling, autoscaling hooks, and repeatable manifests.
 
 The validation environment used **Docker Desktop Kubernetes**, not K3s.
-The manifests are still portable to K3s, Minikube, or a VM cluster, but non-Docker-Desktop clusters must receive the locally built images through either image loading or a registry.
+The manifests are still portable to K3s, Minikube, or a VM cluster, with non-Docker-Desktop clusters using either image loading or registry-published images.
+
+### Kubernetes implementation process
+
+The Kubernetes work started from the local Docker workflow and separated the parts that need different lifecycle behavior in a cluster.
+Airflow was split into a webserver deployment, one scheduler deployment, and worker deployment so UI/API traffic, scheduling, and task execution can scale or restart independently.
+Postgres and Redis were added as stateful backing services for Airflow metadata and Celery task coordination.
+Pushgateway was added to the kustomization after the drift DAG already depended on it, closing the gap between the Airflow monitoring code and the Kubernetes runtime.
+
+The cluster design also had to handle the fact that Airflow writes runtime files while Kubernetes pods are replaceable.
+For that reason the manifests use PVCs for the shared project workspace, task logs, Postgres data, and Redis data.
+The Airflow pods copy project code from the image seed into the PVC-backed workspace at startup, then set DVC into local no-SCM mode inside the pod workspace.
+That combination keeps DAG code fresh after image rebuilds while preserving runtime data and avoiding Git operations from inside the cluster.
+
+Scheduling was aligned with Docker Compose through the same environment variables:
+
+| Schedule variable | Kubernetes value | Workflow |
+|-------------------|------------------|----------|
+| `MLOPS_E2E_SCHEDULE` | `0 6 * * *` | End-to-end extraction, training, versioning, logging, and validation |
+| `MODEL_VERSIONING_SCHEDULE` | `0 4 * * *` | Data/model versioning and manifests |
+| `DRIFT_MONITORING_SCHEDULE` | `0 7 * * *` | Drift report and Pushgateway metric handoff |
 
 ### Implemented resources
 
@@ -377,7 +409,7 @@ The manifests are still portable to K3s, Minikube, or a VM cluster, but non-Dock
 
 ### Persistence design
 
-Kubernetes uses persistent volumes for state that must survive pod replacement:
+Kubernetes uses persistent volumes for state that survives pod replacement:
 
 | PVC | Purpose |
 |-----|---------|
@@ -429,6 +461,20 @@ It connects data ingestion, retraining, DVC versioning, MLflow logging, and drif
 
 The Airflow configuration was changed from a manual-only setup into an automated workflow.
 The DAGs are unpaused, scheduled, and visible in both Docker Airflow and Kubernetes Airflow.
+
+### Airflow automation design
+
+The Airflow work turned separate local scripts into a production sequence with clear task order, task outputs, and failure points.
+The DAGs do not only call the training script.
+They prepare the raw dataset, update DVC pointers, verify local artifacts, record manifests, train the model, record output versions, check API compatibility, and leave a DVC status snapshot for review.
+
+The schedule design is daily rather than every few hours because the target label is `rain_tomorrow`.
+The project needs enough time for the next-day label to become meaningful before retraining.
+The freshness check records the latest available `Date`, the observed lag, the allowed lag, and the reason daily automation is the correct level for this dataset.
+
+The DAGs are also deliberately local-first.
+They can update local `.dvc` pointer files and reports inside Docker or Kubernetes, but they do not push to GitHub or DagsHub from inside an Airflow run.
+This keeps automation reproducible while leaving remote publishing tied to review and merge.
 
 ### Implemented DAGs
 
@@ -530,6 +576,24 @@ This means a fresh machine can resolve the committed raw/model artifacts from Da
 The local training workflow can also produce a newer `data/monitoring/reference_dataset.csv`.
 During the latest validation, a newer local reference dataset was produced but its remote upload did not complete, so the committed pointer intentionally remained on the last remote-synced object.
 
+### Versioning process
+
+The DVC process was built around traceability rather than only file storage.
+The versioning module reads every `.dvc` pointer, extracts the tracked path, hash, hash type, and size, and writes that state into JSON manifests under `reports/versioning/`.
+The same manifest also records the Git context, Airflow run context, DVC remote, model metadata, model configuration summary, sample input path, and model artifact path.
+
+Two snapshots are recorded around training:
+
+| Snapshot | What it captures |
+|----------|------------------|
+| Input snapshot | Raw data pointer, existing model metadata/config, local artifact presence, Git context, DVC remote, and Airflow run metadata |
+| Output snapshot | Updated model artifact, updated metadata, updated sample input, DVC pointer state, and tracking handoff state |
+
+The workflow also writes a DVC status manifest after each automated run.
+That status file is useful because it records whether the local runtime changed artifacts without silently assuming those changes are already available in the remote store.
+During the final DVC cleanup, the raw dataset and winner model object were pushed successfully to DagsHub before merge.
+The newer local monitoring reference dataset was left uncommitted because its remote upload did not complete, preserving a repository state that can still be pulled cleanly on another machine.
+
 ### MLflow integration context
 
 MLflow records model metadata, metrics, parameters, and artifacts.
@@ -557,6 +621,17 @@ Both runtimes found the model artifact, metadata, config, and sample input and p
 The ingestion layer was designed so new WeatherAUS-format data can enter the same path as the original training data.
 Incoming rows are not treated as a separate prediction-only file.
 They are merged into the raw dataset and then included in the next Airflow-driven training cycle.
+
+### Extraction and merge process
+
+The ingestion code supports existing WeatherAUS files, compressed files, online CSV/ZIP sources, Kaggle-style sources, and recent Open-Meteo daily observations.
+Regardless of source, the data is converted back into the raw WeatherAUS-style training table before training sees it.
+The extraction step validates row counts, writes the target file atomically, and records an extraction manifest with the action, mode, source record, target record, validation result, and merge summary.
+
+The upsert mode is important for production use.
+It compares incoming rows against existing rows by the `Date` and `Location` key.
+Rows with new keys are inserted, rows with repeated keys replace the older version, unchanged overlaps are counted, and duplicate incoming keys are reported in the manifest.
+This makes repeated daily ingestion safe because rerunning a DAG does not blindly duplicate the same station-date observation.
 
 ### Supported incoming data modes
 
