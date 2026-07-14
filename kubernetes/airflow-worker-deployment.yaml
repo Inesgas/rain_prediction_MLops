@@ -92,7 +92,8 @@ spec:
                 - import socket; socket.create_connection(("127.0.0.1", 8793), 5).close()
             initialDelaySeconds: 90
             periodSeconds: 30
-            timeoutSeconds: 10
+            timeoutSeconds: 30
+            failureThreshold: 5
           resources:
             requests:
               cpu: 500m
