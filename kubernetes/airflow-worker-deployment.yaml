@@ -42,6 +42,14 @@ spec:
                 cp -a /opt/airflow/project-seed/. /opt/airflow/project/
                 touch /opt/airflow/project/.project_seeded
               fi
+              for path in src references tests; do
+                mkdir -p "/opt/airflow/project/$path"
+                cp -a "/opt/airflow/project-seed/$path/." "/opt/airflow/project/$path/"
+              done
+              for path in data/raw data/preprocessed data/monitoring models/final_winner; do
+                mkdir -p "/opt/airflow/project/$path"
+                cp -an "/opt/airflow/project-seed/$path/." "/opt/airflow/project/$path/" || true
+              done
               if [ ! -f /opt/airflow/project/.dvc/config ]; then
                 mkdir -p /opt/airflow/project/.dvc
                 cp -a /opt/airflow/project-seed/.dvc/. /opt/airflow/project/.dvc/

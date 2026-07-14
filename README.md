@@ -293,22 +293,48 @@ Kubernetes provides a more production-style setup with replicated services and a
 ### Included resources
 
 - FastAPI deployment with 3 baseline replicas and HPA up to 6 replicas
-- Airflow webserver deployment with 2 replicas
-- Airflow scheduler deployment with 2 replicas
+- Airflow webserver deployment with 3 replicas
+- Airflow scheduler deployment with 1 stable scheduler replica
 - Airflow Celery workers with autoscaling
 - Postgres StatefulSet for Airflow metadata
 - Redis StatefulSet for Celery broker
 - Airflow migration job
-- PersistentVolumeClaims
+- PersistentVolumeClaims for Airflow project files, Airflow logs, Postgres, and Redis
+- Pushgateway service used by the drift-monitoring DAG
 - PodDisruptionBudgets
 
 ### Build images first
 
+The manifests use local image names. On Docker Desktop Kubernetes, build these images with Docker Desktop's engine before applying the manifests. On K3s, Minikube, or a remote VM cluster, either build/load these images into that cluster runtime or push them to a registry and update the image names in `kubernetes/*.yaml`.
+
+Restore the DVC-tracked artifacts before building images so Airflow and FastAPI have the required seed data/model files:
+
+```bash
+# VM Bash
+dvc pull data/raw/weatherAUS.csv.dvc \
+  data/preprocessed/rain_model_dataset_aligned.csv.dvc \
+  data/monitoring/reference_dataset.csv.dvc \
+  models/final_winner/winner_model.joblib.dvc
+```
+
 ```bash
 # VM Bash
 docker build -f docker/prediction-api/api.Dockerfile -t rain_prediction_mlops-fastapi:latest .
+docker build -f docker/model-fetcher/model-fetcher.Dockerfile -t rain_prediction_mlops-model-fetcher:latest .
 docker build -f docker/airflow/airflow.Dockerfile -t rain_prediction_mlops-airflow:latest .
-docker tag rain_prediction_mlops-airflow:latest rain_prediction_mlops-airflow:production-dvc
+docker tag rain_prediction_mlops-airflow:latest rain_prediction_mlops-airflow:inesgas-airflow-20260713
+```
+
+Create the Kubernetes DagsHub secret used by the FastAPI model-fetcher init container:
+
+```bash
+# VM Bash
+kubectl create namespace rain-prediction --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic dagshub-credentials \
+  -n rain-prediction \
+  --from-literal=DVC_REMOTE_USER="<dagshub-username>" \
+  --from-literal=DVC_REMOTE_PASSWORD="<dagshub-token>" \
+  --dry-run=client -o yaml | kubectl apply -f -
 ```
 
 ### Apply manifests
@@ -326,12 +352,13 @@ kubectl top pods -n rain-prediction
 | Resource | Expected |
 |----------|----------|
 | `rain-prediction-api` | `3/3` |
-| `rain-prediction-airflow-webserver` | `2/2` |
-| `rain-prediction-airflow-scheduler` | `2/2` |
+| `rain-prediction-airflow-webserver` | `3/3` |
+| `rain-prediction-airflow-scheduler` | `1/1` |
 | `rain-prediction-airflow-worker` | at least `2/2`, can scale to `3/3` |
 | `airflow-postgres` | `1/1` |
 | `airflow-redis` | `1/1` |
 | `airflow-migrate` | `Complete` |
+| `pushgateway` | `1/1` |
 
 ### Port-forward checks
 
@@ -519,7 +546,7 @@ docker compose -f src/docker/docker-compose-dev.yml up --build airflow
 |---------|------------|-----|----------|----------|-------|
 | Airflow | Docker Compose root stack | `http://localhost:8080` | `admin` | `airflow` | Defined in `docker-compose.yml` |
 | Airflow | Legacy dev compose | `http://localhost:8080` | `airflow` | `airflow` | Defined in `src/docker/docker-compose-dev.yml` |
-| Airflow | Kubernetes | `http://localhost:18080` via port-forward | `admin` | `rain-airflow-admin-change-me` | Placeholder in `kubernetes/airflow-secret.yaml` |
+| Airflow | Kubernetes | `http://localhost:18080` via port-forward | `admin` | `airflow` | Placeholder in `kubernetes/airflow-secret.yaml` |
 | MLflow | Docker Compose root stack | `http://localhost:5000` | none | none | Local tracking UI |
 | Grafana | Docker Compose | `http://localhost:3000` | `admin` | `admin` | Defined in compose |
 | Prometheus | Docker Compose | `http://localhost:9090` | none | none | Local monitoring only |
