@@ -29,13 +29,12 @@
 - [Docker Compose](#docker-compose)
 - [Kubernetes](#kubernetes)
 - [Airflow Pipelines](#airflow-pipelines)
-- [MLflow and DVC](#mlflow-and-dvc)
+- [DVC Artifact Versioning](#dvc-artifact-versioning)
 - [Data Ingestion](#data-ingestion)
 - [Access and Security Context](#access-and-security-context)
 - [Resolved Integration Issues](#resolved-integration-issues)
 - [Security Handling](#security-handling)
 - [Project Notes](#project-notes)
-- [Team-Owned Report Areas](#team-owned-report-areas)
 
 ***
 
@@ -53,11 +52,10 @@ This README is written as the project report: it explains what was built, what e
 - A data science workflow for weather cleaning, feature engineering, chronological splitting, model training, and evaluation
 - A final CatBoost model package with a stable 68-feature prediction contract
 - Data and model artifact versioning with **DVC** and DagsHub remote storage
-- Experiment and model metadata logging with **MLflow**
 - Automated training, versioning, and drift-monitoring workflows with **Airflow**
 - Local integration with **Docker Compose**
 - Production-style orchestration with **Kubernetes**, PVC-backed Airflow state, HPA/PDB resources, and service separation
-- API, gateway, and dashboard integration points where the FastAPI, Nginx, Prometheus, and Grafana parts can be extended by the team owners
+- Integration points with FastAPI, Nginx, MLflow, Evidently, Grafana, and Prometheus where they connect to the DVC, Airflow, Kubernetes, and data pipeline work
 
 ***
 
@@ -167,8 +165,8 @@ The production layer focused on three responsibilities:
 | Area | What was implemented |
 |------|----------------------|
 | DVC | Large data and model artifacts are tracked with DVC pointers and synced to the DagsHub DVC remote. |
-| Airflow | Four DAGs coordinate ingestion, retraining, versioning, MLflow logging, and drift monitoring. |
-| Kubernetes | Airflow, FastAPI integration, Postgres, Redis, Pushgateway, PVCs, HPAs, and PDBs are deployed through `kubernetes/kustomization.yaml`. |
+| Airflow | Four DAGs coordinate ingestion, retraining, DVC versioning, and integration checks around model logging and drift monitoring. |
+| Kubernetes | Airflow, Postgres, Redis, Pushgateway, PVCs, HPAs, PDBs, and service reachability are deployed through `kubernetes/kustomization.yaml`. |
 
 Final validation confirmed:
 
@@ -273,9 +271,9 @@ The final model metadata also stores the feature list, categorical feature list,
 
 ## API
 
-The API layer is the serving boundary for the trained model.
+The API layer is the serving layer for the trained model.
 It exposes the model health, model metadata, and prediction behavior expected by the rest of the stack.
-The detailed FastAPI and Nginx gateway implementation remains the team-owned API/gateway section, while this report records how the MLOps layer depends on it.
+This report records how the MLOps workflow depends on the running API service.
 
 ### Endpoints
 
@@ -325,7 +323,7 @@ This keeps the merged Git state consistent with the external artifact store.
 ## Docker Compose
 
 Docker Compose is the local integration layer.
-It brings the project services together on one machine so the team can validate interactions before moving to Kubernetes.
+It brings the project services together on one machine so integrated behavior can be validated before moving to Kubernetes.
 
 ### Integrated services
 
@@ -346,10 +344,10 @@ It brings the project services together on one machine so the team can validate 
 | MLflow tracking | Local model logging is available without relying on hosted credentials |
 | Pushgateway | Batch drift metrics have a local metrics target |
 | Prediction traffic | Synthetic prediction traffic keeps monitoring dashboards populated |
-| Gateway/dashboard integration | Nginx, Prometheus, and Grafana are integrated for team-owned gateway and monitoring work |
+| Gateway/dashboard integration | Nginx, Prometheus, and Grafana are integrated as gateway and monitoring services |
 
 During the final review, Docker Airflow, FastAPI, MLflow, Pushgateway, Grafana, node-exporter, and prediction traffic were running.
-Nginx and Prometheus required teammate-owned local mount cleanup, so their detailed readiness belongs to the API/gateway and monitoring owners.
+Nginx and Prometheus still had local mount cleanup items during final review, so this report keeps the detailed readiness discussion focused on Airflow, DVC, Kubernetes, and the data flow.
 
 ***
 
@@ -505,7 +503,7 @@ The Airflow layer was validated in both Docker Compose and Kubernetes.
 
 ***
 
-## MLflow and DVC
+## DVC Artifact Versioning
 
 ### DVC
 
@@ -532,16 +530,17 @@ This means a fresh machine can resolve the committed raw/model artifacts from Da
 The local training workflow can also produce a newer `data/monitoring/reference_dataset.csv`.
 During the latest validation, a newer local reference dataset was produced but its remote upload did not complete, so the committed pointer intentionally remained on the last remote-synced object.
 
-### MLflow
+### MLflow integration context
 
 MLflow records model metadata, metrics, parameters, and artifacts.
+This section is included because the Airflow and training flow connect to a tracking target.
 The project supports two tracking targets:
 
 - Local Docker MLflow for Airflow-triggered development and demonstration runs
 - DagsHub MLflow for hosted experiment tracking
 
 The Airflow integration was adjusted so local Docker Airflow uses the Docker MLflow service by default.
-This avoids accidental DagsHub `403` failures when a teammate does not have hosted MLflow credentials configured.
+This avoids accidental DagsHub `403` failures when hosted MLflow credentials are not configured.
 
 | `AIRFLOW_MLFLOW_TRACKING_URI` | Airflow-triggered runs appear in | Manual training runs appear in |
 |-------------------------------|----------------------------------|--------------------------------|
@@ -658,29 +657,7 @@ This section records the work behind the final state.
 This project is intentionally local-first.
 Airflow DAGs update local files, local DVC metadata, local reports, and the configured MLflow target, but they do **not** push Git commits or DVC objects automatically to GitHub or DagsHub.
 
-### Team integration
+### Focused work
 
-Andrey's FastAPI and Nginx implementation remains the official API and gateway layer.
-The integration work extends orchestration, monitoring, Docker Compose, and Kubernetes support without replacing the API behavior or the gateway security design.
-
-| Area | Role |
-|------|------|
-| `src/prediction_api/main.py` | Official FastAPI application used by Docker, Airflow, CI, monitoring, and Kubernetes |
-| `nginx/nginx.conf` | Security gateway for authentication, forwarded users, rate limiting, and protected API access |
-| `docker-compose.yml` | Integrates FastAPI, Nginx, Prometheus, Grafana, Airflow, and prediction traffic |
-| `tests/test_prediction_api_contract.py` | Lightweight contract test for Airflow and CI |
-| `src/monitoring/drift_report.py` | Evidently data drift report generation, invoked by the `drift_monitoring` Airflow DAG |
-
-***
-
-## Team-Owned Report Areas
-
-The current report covers the data science foundation, DVC, Airflow, Kubernetes, and the data-to-training path.
-The remaining report areas belong to the team owners of those components:
-
-| Owner area | Report scope |
-|------------|--------------|
-| FastAPI | Detailed API design, authentication behavior, request/response contract, and model-serving decisions |
-| Nginx gateway | Gateway security, password-hash handling, TLS setup, protected routes, and rate limiting |
-| Prometheus and Grafana | Monitoring architecture, dashboard panels, metric sources, and alerting choices |
-| Presentation | Final Streamlit presentation and speaker script kept outside the README report |
+The detailed explanation stays focused on DVC, Airflow, Kubernetes, and the path from incoming data to retraining and artifact versioning.
+MLflow, FastAPI, Nginx, Evidently, Grafana, and Prometheus appear only where they are part of that workflow.
