@@ -571,7 +571,7 @@ Validated runtime state:
 | Airflow scheduler | `1/1` ready |
 | Airflow webserver | `3/3` ready |
 | Airflow workers | `2/2` ready, HPA configured for 2-3 |
-| FastAPI | `3/3` ready |
+| FastAPI | HPA configured for 3-4 replicas |
 | Postgres | `1/1` ready |
 | Redis | `1/1` ready |
 | Pushgateway | `1/1` ready |
