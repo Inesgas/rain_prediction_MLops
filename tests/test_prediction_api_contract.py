@@ -17,7 +17,7 @@ VALID_PAYLOAD = {
 }
 
 ADMIN_USERNAME = os.getenv("FASTAPI_ADMIN_USER") or os.getenv("NGINX_ADMIN_USER")
-USER_HEADERS = {"X-Forwarded-User": "admin"}
+USER_HEADERS = {"X-Forwarded-User": "ines"}
 
 
 def get_admin_headers():

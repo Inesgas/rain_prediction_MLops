@@ -49,7 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Validate Docker Compose
+      - name: Validate local integration config
         run: docker compose config
 
       - name: Build FastAPI image

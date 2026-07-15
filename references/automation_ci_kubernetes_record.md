@@ -75,7 +75,7 @@ The contract test skips model-loading assertions when the DVC model artifact is 
 
 `docker-build` checks:
 
-- Docker Compose configuration
+- Local integration configuration
 - FastAPI Docker image build
 - Airflow Docker image build
 
@@ -151,9 +151,9 @@ The Kubernetes bundle is listed in:
 
 API security hardening and MLflow tracking are left for the teammates responsible for those parts.
 
-## Andrey Integration Notes
+## API and Gateway Integration Notes
 
-Andrey's FastAPI and Nginx files were touched only where orchestration and deployment needed to connect to them.
+The FastAPI and Nginx files were touched only where orchestration and deployment needed to connect to them.
 
 | Area | What changed | Why it was needed |
 |---|---|---|
@@ -163,15 +163,15 @@ Andrey's FastAPI and Nginx files were touched only where orchestration and deplo
 | Monitoring | Connected Prometheus and Grafana to the FastAPI metrics endpoint. | The monitoring dashboard depends on metrics emitted by the official API. |
 | Docker/Kubernetes | Built and deployed the official FastAPI app rather than the older API draft. | The deployment needed to reflect the API chosen by the team. |
 
-The integration work did not replace Andrey's API or security design. It made those components usable from the automated pipeline and local deployment stack.
+The integration work did not replace the API or security design. It made those components usable from the automated pipeline and local deployment stack.
 
 ## Local Verification
 
 Python syntax checks passed for the Airflow DAGs, extraction modules, versioning module, official FastAPI module, and FastAPI contract test.
 
-Docker Compose configuration validation passed.
+Local integration configuration validation passed.
 
-Docker Compose monitoring was updated with a `prediction-traffic` service. This local service waits for FastAPI to become healthy, loads all supported locations from `/locations`, and sends one valid batch prediction for every location once per minute on the internal Docker network. Prometheus confirmed `54` distinct `rain_predictions_total` location labels, so Grafana dashboards show data immediately when opened.
+The local integration stack was updated with a `prediction-traffic` service. This local service waits for FastAPI to become healthy, loads all supported locations from `/locations`, and sends one valid batch prediction for every location once per minute on the internal container network. Prometheus confirmed `54` distinct `rain_predictions_total` location labels, so Grafana dashboards show data immediately when opened.
 
 The Grafana `Predictions by City` query was changed from a top-10 query to `sum(rain_predictions_total) by (location)` so all supported locations can appear in the dashboard data.
 

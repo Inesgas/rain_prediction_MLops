@@ -47,6 +47,7 @@ venv/
 data/cleaned/*
 !data/cleaned/.gitkeep
 data/incoming/
+data/monitoring/predictions/
 models/tmp/
 reports/*
 !reports/monitoring_and_orchestration_work_report_2026_06_19_FINAL.docx
@@ -69,4 +70,5 @@ nginx/certs/*.key
 kubernetes/fastapi-secret.yaml
 .env
 .env.local
-.env.*.localnginx/.htpasswd
+.env.*.local
+nginx/.htpasswd
