@@ -857,14 +857,3 @@ This section records the work behind the final state.
 
 ***
 
-## Project Notes
-
-### Local-first workflow
-
-This project is intentionally local-first.
-Airflow DAGs update local files, local DVC metadata, local reports, and the configured MLflow target, but they do **not** push Git commits or DVC objects automatically to GitHub or DagsHub.
-
-### Focused work
-
-The detailed explanation stays focused on DVC, Airflow, Kubernetes, and the path from incoming data to retraining and artifact versioning.
-MLflow, FastAPI, Nginx, Evidently, Grafana, and Prometheus appear only where they are part of that workflow.
