@@ -40,98 +40,152 @@
 
 ## Overview
 
-This repository documents a complete rainfall prediction project that moved from a data science model into a production-style MLOps system.
-The data science part answers the modeling question: **given Australian weather observations, can we predict whether it will rain tomorrow?**
-The MLOps part answers the production question: **can the model, data, training process, monitoring, and deployment be reproduced and operated as a system instead of remaining as a notebook result?**
+This repository presents a complete rainfall prediction project that starts as a data science problem and finishes as a production-style MLOps workflow.
+The data science question is direct: **given Australian daily weather observations, can the project predict whether it will rain tomorrow?**
+The production question is larger: **can the model, data, training process, artifact history, monitoring, and deployment be reproduced and operated as one system?**
 
-The current project serves a final **hybrid CatBoost winner model** through a FastAPI-based prediction service and connects training, versioning, tracking, orchestration, monitoring, and Kubernetes deployment into one local-first production workflow.
-This README is written as the project report: it explains what was built, what each stage contributes, and what was validated.
+The final system serves a **hybrid CatBoost rainfall classifier** through a FastAPI prediction service.
+Around that model, the project connects DVC artifact versioning, MLflow tracking, Airflow automation, Evidently drift reporting, containerized services, and Kubernetes deployment.
+The result is no longer only a trained notebook model: it is a reproducible workflow with a defined feature contract, scheduled retraining path, versioned data/model artifacts, runtime validation checks, and production-style service separation.
+
+This README is the project report.
+It records the work behind the model, the production architecture, the repository structure, the serving contract, and the validation evidence used to judge readiness.
 
 ### What this project covers
 
-- A data science workflow for weather cleaning, feature engineering, chronological splitting, model training, and evaluation
-- A final CatBoost model package with a stable 68-feature prediction contract
-- Data and model artifact versioning with **DVC** and DagsHub remote storage
-- Automated training, versioning, and drift-monitoring workflows with **Airflow**
-- A separate local integration context for same-machine checks where the existing stack needs it
-- Production-style orchestration with **Kubernetes**, PVC-backed Airflow state, HPA/PDB resources, and service separation
-- Integration points with FastAPI, Nginx, MLflow, Evidently, Grafana, and Prometheus where they connect to the DVC, Airflow, Kubernetes, and data pipeline work
+| Area | Final project content |
+|------|-----------------------|
+| Data science | Weather cleaning, feature engineering, chronological splitting, model comparison, final CatBoost training, and evaluation |
+| Model artifact | DVC-tracked winner model with a 68-feature contract, metadata, sample input, threshold, and monitoring reference data |
+| Artifact history | DVC pointers for raw data, processed data, monitoring reference data, and the final served model |
+| Experiment tracking | MLflow logging payloads for model metrics, parameters, tags, and artifacts |
+| Orchestration | Airflow DAGs for daily ingestion, end-to-end retraining, model/data versioning, and drift monitoring |
+| Monitoring | Evidently drift reports, Pushgateway handoff, prediction traffic, and metrics integration points |
+| Serving | FastAPI model service with health, prediction, batch prediction, metadata, feature, and metrics endpoints |
+| Deployment | Kubernetes manifests for Airflow, FastAPI, Postgres, Redis, Pushgateway, PVCs, HPA/PDB resources, and services |
+| Local integration | Docker Compose remains as a same-machine integration context for checking the service stack together |
 
 ***
 
 ## Architecture
 
-The project architecture has two connected layers.
-The first layer is the **data science layer**, where raw weather observations are cleaned, enriched, split chronologically, trained, and evaluated.
-The second layer is the **MLOps production layer**, where the same data/model workflow is versioned, scheduled, monitored, containerized, and deployed.
+The architecture is organized as a pipeline that moves from weather observations to a served, monitored, versioned model.
+The first layer is the **data science foundation**, where the raw WeatherAUS-style observations are cleaned, enriched, split chronologically, trained, and evaluated.
+The second layer is the **production MLOps layer**, where the data/model workflow is automated, versioned, tracked, monitored, packaged, and deployed.
+
+The same artifact contract connects both layers.
+Training writes the model, metadata, sample input, and reference dataset.
+The API reads that contract for inference.
+Airflow uses it for retraining and validation.
+DVC versions it.
+MLflow records it.
+Evidently compares live/current data against it.
+Kubernetes runs the services that operate it.
 
 ```text
-Weather observations
+Weather data sources
         |
         v
-Data cleaning + feature engineering
+Raw WeatherAUS-style dataset
+        |
+        +-----------------------------+
+        |                             |
+        v                             v
+Training data path             Production/inference data path
+        |                             |
+        v                             v
+Cleaning + feature engineering  FastAPI prediction requests
         |
         v
 Chronological train / validation / test split
         |
         v
-Hybrid CatBoost winner model
+Hybrid CatBoost winner model + metadata contract
         |
         +---------------------> FastAPI prediction service
         |
-        +---------------------> MLflow run metadata
+        +---------------------> MLflow metrics, params, tags, artifacts
         |
-        +---------------------> DVC model and data versions
+        +---------------------> DVC data/model artifact versions
         |
         v
-Airflow automated workflows
+Airflow automated production workflows
         |
-        +---------------------> data/model versioning
-        +---------------------> retraining and artifact refresh
+        +---------------------> daily data extraction and merge
+        +---------------------> end-to-end retraining and artifact refresh
+        +---------------------> data/model versioning snapshots
         +---------------------> Evidently drift reports
         |
         v
-Kubernetes runtime
+Kubernetes production-style runtime
 ```
 
 ### Runtime roles
 
 | Runtime area | Purpose | Main Entry Point |
 |--------------|---------|------------------|
-| Kubernetes | Production-style deployment with separated services, persistent state, scaling hooks, and service reachability | `kubernetes/kustomization.yaml` |
-| Local integration context | Same-machine validation for services that already exist in the repository stack | `docker-compose.yml` |
+| Kubernetes | Production-style runtime with separated services, persistent Airflow state, service discovery, scaling hooks, and availability policies | `kubernetes/kustomization.yaml` |
+| Airflow | Scheduled automation layer for ingestion, retraining, versioning, tracking handoff, API checks, and drift monitoring | `airflow/dags/` |
+| DVC + DagsHub | Versioned external artifact history for large data/model files that should not live directly in Git | `.dvc/`, `*.dvc` pointers |
+| MLflow | Experiment and model metadata tracking for training runs and logging dry-runs | `src/versioning/mlflow_tracking.py` |
+| Evidently | Drift report generation from reference/current datasets and monitoring metrics handoff | `src/monitoring/drift_report.py` |
+| Local integration context | Same-machine service validation where the repository stack needs multiple services started together | `docker-compose.yml` |
+
+### Service flow
+
+| Step | What happens | Main files |
+|------|--------------|------------|
+| 1. Data enters | Historical or incoming weather rows are normalized into the project schema and merged by `Date` + `Location` | `src/data/extract_weather_data.py`, `src/data/extract_open_meteo_daily.py` |
+| 2. Data is prepared | Feature engineering rebuilds the model-ready table with weather, date, location, lag, missingness, and climate context | `src/features/`, `src/models/train_winner.py` |
+| 3. Model is trained | The winner training path produces the CatBoost artifact, metadata, sample input, and monitoring reference dataset | `src/models/train_winner.py`, `models/final_winner/` |
+| 4. Artifacts are tracked | DVC records the raw data, processed data, model, and monitoring reference pointers | `*.dvc`, `src/versioning/dvc_versioning.py` |
+| 5. Runs are logged | MLflow receives metrics, parameters, tags, and artifact references | `src/versioning/mlflow_tracking.py` |
+| 6. Service is validated | FastAPI loads the model contract and exposes health, prediction, metadata, and metrics endpoints | `src/prediction_api/main.py` |
+| 7. Drift is checked | Evidently compares reference/current data and can push summary metrics to Pushgateway | `src/monitoring/drift_report.py` |
+| 8. Runtime is deployed | Kubernetes runs the Airflow and serving stack with PVCs, services, HPAs, and PDBs | `kubernetes/` |
 
 ***
 
 ## Data Science Foundation
 
-The data science stage transformed the WeatherAUS rainfall dataset into a supervised binary classification problem.
-The target is `rain_tomorrow`, and the model uses daily weather, location, climate, lag, and engineered meteorological signals to estimate the probability of rain on the following day.
+The data science stage transformed Australian weather observations into a supervised binary classification problem.
+The target is `rain_tomorrow`.
+Each row represents a daily station observation, and the model estimates the probability that the next day will be rainy for that location.
+
+The important design choice was to make the modeling output reusable by production code.
+The project therefore does not stop at a notebook score.
+It produces a stable feature list, metadata file, decision threshold, sample input, categorical feature list, numeric fill values, and monitoring reference dataset.
+Those outputs are the contract used later by FastAPI, Airflow, DVC, MLflow, Evidently, and Kubernetes.
 
 ### Data preparation and feature engineering
 
-The modeling dataset was not used as a raw table directly.
-It was prepared as a feature contract that can be reused by training, API inference, Airflow automation, and Kubernetes deployment.
+The raw table was reshaped into a production feature contract.
+The preparation work included schema normalization, missing-value handling, temporal features, location enrichment, meteorological transformations, lag features, and categorical handling.
 
-What was prepared:
-
-- Weather records were standardized around date, location, numeric meteorological columns, categorical location columns, and the `rain_tomorrow` target.
-- Missing values were handled with explicit hybrid imputation indicators such as `rainfall_missing_hybrid`, `sunshine_missing_hybrid`, `cloud_3pm_missing_hybrid`, and pressure/humidity missingness flags.
-- Date features were expanded into `month`, `day`, `year`, and cyclic yearly signals.
-- Location context was enriched with latitude, longitude, elevation, and rainfall-zone indicators.
-- Wind direction was converted into numerical direction vectors so that circular direction values could be learned by the model.
-- Short-term weather dynamics were added with features such as temperature difference, humidity difference, pressure difference, previous-day rainfall, previous-day maximum temperature, and 24-hour changes.
-- Dew point and stability-style features were added to represent moisture and atmospheric behavior.
+| Preparation area | What was built |
+|------------------|----------------|
+| Schema alignment | Weather rows are standardized around `Date`, `Location`, weather measurements, categorical weather fields, and the `rain_tomorrow` target |
+| Missingness handling | Hybrid missingness flags preserve information from absent rainfall, sunshine, cloud, pressure, humidity, evaporation, and temperature values |
+| Calendar features | Date is expanded into month/day/year and cyclic seasonal signals |
+| Geographic context | Location is enriched with latitude, longitude, elevation, region/climate context, and rainfall-zone indicators |
+| Wind encoding | Wind direction is converted into numerical direction vectors so circular direction values can be learned correctly |
+| Weather dynamics | Temperature, humidity, pressure, rainfall, and previous-day changes are added to capture short-term atmospheric movement |
+| Moisture/stability features | Dew point and stability-style variables represent humidity and atmospheric behavior beyond raw columns |
+| API contract support | A valid `sample_input.json` is stored with the model so inference tests and demos use the same feature expectations as training |
 
 ### Modeling strategy
 
-The final model was selected as a **hybrid CatBoost classifier** because it handles mixed numeric/categorical tabular data well and gave the best balance between ranking quality and rain-event recall.
-The final contract contains **68 input features**, including categorical features such as `location`, `humidity_9am_bin`, `pressure_9am_bin`, and `temp_9am_bin`.
+Several modeling directions were explored in the project, including baseline modeling, feature-aligned tabular modeling, location-aware refinements, missingness-aware experiments, rolling robustness validation, and sequence/deep-learning benchmarks.
+The final served model is a **hybrid CatBoost classifier** because it fits the project data shape well: mixed numeric/categorical tabular weather features, missingness indicators, location effects, and nonlinear interactions.
+
+The final contract contains **68 input features**.
+It includes categorical features such as `location`, `humidity_9am_bin`, `pressure_9am_bin`, and `temp_9am_bin`, while the rest of the contract is numeric weather, calendar, location, lag, and engineered meteorological context.
 
 The split strategy was chronological instead of random.
 This is important for weather data because random splitting can leak future seasonal patterns into training.
-The workflow uses older observations for training and the newest observations for final testing.
-The latest trained artifact reports:
+The workflow uses older observations for training and keeps the newest observations for final testing, so the model is evaluated closer to how it would behave on future data.
+
+The latest served artifact reports:
 
 | Item | Value |
 |------|-------|
@@ -139,34 +193,45 @@ The latest trained artifact reports:
 | Test rows | 28,297 |
 | Test period | 2015-12-04 to 2026-07-12 |
 | Decision threshold | 0.58 |
+| ROC-AUC | 0.8945 |
+| F1-score | 0.6839 |
+| Precision | 0.6386 |
+| Recall | 0.7361 |
+
+The selected threshold prioritizes practical rain-event detection rather than only optimizing a default probability cutoff.
+That threshold is stored in metadata and reused by serving and validation code.
 
 ### Data science outputs
 
-The data science layer produces the assets that the MLOps layer operates:
+The data science layer produces the assets that the production layer operates.
+These files are treated as model-system artifacts, not temporary notebook outputs.
 
 | Output | Purpose |
 |--------|---------|
 | `data/raw/weatherAUS.csv` | DVC-tracked raw/weather source used by training and Airflow retraining |
-| `data/preprocessed/rain_model_dataset_aligned.csv` | DVC-tracked aligned modeling dataset used by drift comparison |
+| `data/preprocessed/rain_model_dataset.csv` | Prepared modeling dataset from the feature pipeline |
+| `data/preprocessed/rain_model_dataset_aligned.csv` | DVC-tracked aligned modeling dataset used by drift comparison and contract checks |
 | `models/final_winner/winner_model.joblib` | DVC-tracked production model artifact |
 | `models/final_winner/metadata.json` | Model contract, metrics, feature list, threshold, and training metadata |
 | `models/final_winner/sample_input.json` | Valid example payload aligned with the 68-feature contract |
 | `data/monitoring/reference_dataset.csv` | Training reference data written by training for drift comparison |
+| `reports/versioning/` | Airflow/DVC manifests that record extraction, input, output, and status snapshots |
 
 ***
 
 ## Production MLOps Contribution
 
-The MLOps contribution turns the data science result into an operating workflow.
-Instead of only storing a model file, the project now has a reproducible path for extracting data, retraining, versioning artifacts, logging model metadata, checking drift, packaging services as container images, and running the system through Kubernetes.
+The production MLOps contribution turns the data science result into an operating workflow.
+The model is not treated as a standalone file.
+It is part of a system that extracts and merges data, retrains on schedule, versions artifacts, logs run metadata, validates serving behavior, checks drift, and runs through Kubernetes.
 
 The production layer focused on three responsibilities:
 
 | Area | What was implemented |
 |------|----------------------|
-| DVC | Large data and model artifacts are tracked with DVC pointers and synced to the DagsHub DVC remote. |
-| Airflow | Four DAGs coordinate ingestion, retraining, DVC versioning, and integration checks around model logging and drift monitoring. |
-| Kubernetes | Airflow, Postgres, Redis, Pushgateway, PVCs, HPAs, PDBs, and service reachability are deployed through `kubernetes/kustomization.yaml`. |
+| DVC | Large data/model files are represented by Git-tracked DVC pointers and stored outside Git through the configured DagsHub remote |
+| Airflow | Four DAGs coordinate daily ingestion, end-to-end retraining, DVC versioning, MLflow handoff, API validation, and drift monitoring |
+| Kubernetes | Airflow, FastAPI, Postgres, Redis, Pushgateway, PVCs, services, HPAs, and PDBs are represented through `kubernetes/kustomization.yaml` |
 
 The work was not only a packaging step around a trained model.
 The project was reorganized so that each production action leaves an auditable trace:
@@ -180,6 +245,20 @@ The project was reorganized so that each production action leaves an auditable t
 | Portability | Container images, Airflow settings, Kubernetes manifests, DVC targets, and model artifact paths stay aligned so the workflow behaves consistently across machines and clusters. |
 | Safety of automation | DAGs update local artifacts and reports, but remote DVC/Git publishing remains a deliberate merge-time action. |
 
+### Implemented production workflow
+
+| Workflow stage | Production behavior |
+|----------------|---------------------|
+| Daily extraction | Incoming weather data is normalized into the WeatherAUS-style schema and merged into `data/raw/weatherAUS.csv` |
+| Upsert logic | Repeated station-date rows are updated by `Date` + `Location` instead of blindly duplicated |
+| DVC input snapshot | Raw data and input manifests are checked before training |
+| Training | The winner training module reloads the full raw dataset, rebuilds features, retrains the CatBoost model, and rewrites the served artifact set |
+| MLflow handoff | Model metadata, metrics, parameters, tags, and artifacts are prepared for MLflow logging |
+| DVC output snapshot | Model outputs and DVC status are recorded after training |
+| API contract validation | The serving layer is checked against the model artifact and sample input contract |
+| Drift monitoring | Evidently compares reference/current data and can expose summary metrics through Pushgateway |
+| Kubernetes runtime | Airflow and service components run as separated Kubernetes workloads with persistent state and scaling/availability resources |
+
 Final validation confirmed:
 
 | Check | Result |
@@ -187,11 +266,13 @@ Final validation confirmed:
 | DVC remote status for committed raw/model pointers | Clean and synced |
 | Local Airflow health | Scheduler and metadatabase healthy |
 | Local Airflow DAG imports | No import errors |
+| Airflow schedules | E2E training, versioning, and drift-monitoring schedules are configured |
 | Kubernetes manifest dry-run | Passed server-side dry-run |
 | Kubernetes pods | Airflow, Postgres, Redis, Pushgateway, and API pods running |
 | Kubernetes PVCs | Airflow project/logs, Postgres, and Redis PVCs bound |
 | Kubernetes Airflow DAG imports | No import errors |
 | In-cluster service reachability | Airflow can reach FastAPI and Pushgateway |
+| Focused tests | Airflow, dependency pins, MLflow tracking, and drift-report tests pass together |
 
 ***
 
@@ -200,37 +281,49 @@ Final validation confirmed:
 ```text
 rain_prediction_mlops/
 |-- .github/
-|   `-- workflows/
+|   `-- workflows/               CI checks for Python contracts and container builds
+|-- airflow/
+|   `-- dags/                    Scheduled ingestion, retraining, versioning, and drift workflows
 |-- data/
-|   |-- cleaned/
-|   |-- preprocessed/
-|   |-- raw/
-|   `-- sample/
+|   |-- cleaned/                 Local cleaned-data workspace
+|   |-- incoming/                Local incoming-data landing area
+|   |-- monitoring/              Drift reference/current data and prediction logs
+|   |-- preprocessed/            Modeling datasets and aligned feature tables
+|   |-- processed/               Processed reference/location metadata
+|   |-- raw/                     DVC-tracked source weather data
+|   `-- sample/                  API/demo sample payloads
+|-- deployment/                  Monitoring deployment assets used by the local stack
+|-- docker/
+|   |-- airflow/                 Airflow image and dependency pins
+|   |-- frontend/                Streamlit/frontend service material
+|   |-- gateway/                 Gateway image material
+|   |-- model-fetcher/           Model artifact fetcher image
+|   |-- prediction-api/          Official FastAPI image
+|   |-- testing/                 Containerized test helpers
+|   |-- traffic-generator/       Synthetic prediction traffic for monitoring
+|   `-- training/                Training image material
+|-- kubernetes/                  Production-style Kubernetes manifests and kustomization
 |-- models/
-|   `-- final_winner/
-|-- notebooks/
-|-- references/
+|   `-- final_winner/            Served model, metadata, and sample input
+|-- nginx/                       Gateway configuration and local certificate placeholders
+|-- notebooks/                   Data science exploration and modeling notebooks
+|-- references/                  Climate/location references and validation records
 |-- reports/
-|   `-- figures/
+|   |-- figures/
+|   `-- versioning/              Airflow/DVC manifest output area
+|-- Slides/                      Final presentation deck artifacts
 |-- src/
-|   |-- config/
-|   |-- data/
-|   |-- docker/
-|   |   |-- data-download-prep/
-|   |   |-- database/
-|   |   |-- frontend/
-|   |   |-- gateway/
-|   |   |-- initialization/
-|   |   |-- prediction/
-|   |   |-- scoring/
-|   |   |-- testing/
-|   |   |-- training/
-|   |   `-- users/
-|   |-- features/
-|   |-- models/
-|   |   `-- experiments/
-|   |-- script/
-|   `-- utils/
+|   |-- config/                  Shared paths and constants
+|   |-- data/                    Extraction, merge, and freshness modules
+|   |-- features/                Feature engineering pipeline
+|   |-- models/                  Training, inference, and experiment code
+|   |-- monitoring/              Evidently drift reporting
+|   |-- prediction_api/          FastAPI application
+|   |-- script/                  Smoke-test and automation scripts
+|   |-- utils/                   Shared helpers and validation utilities
+|   `-- versioning/              DVC and MLflow integration code
+|-- tests/                       Contract, orchestration, dependency, MLflow, and drift tests
+|-- docker-compose.yml           Local integration context
 `-- requirements.txt
 ```
 
@@ -238,28 +331,32 @@ rain_prediction_mlops/
 
 | Path | Purpose |
 |------|---------|
-| `src/config/` | Shared paths and project constants |
-| `src/docker/prediction/` | Prediction API service |
-| `src/docker/training/` | Winner model training service |
-| `src/docker/airflow/` | Airflow service for versioning and orchestration |
-| `src/docker/frontend/` | Streamlit dashboard service |
-| `src/docker/testing/` | API and inference validation |
-| `src/models/` | Training, inference, API logic, utilities, experiments |
-| `src/script/` | Project automation scripts |
-| `data/raw/` | Original weather dataset |
-| `data/preprocessed/` | Modeling tables and feature-related artifacts |
-| `data/sample/` | Sample payloads for the API |
-| `models/final_winner/` | Final served model artifact and metadata |
-| `references/` | Climate references, station data, and notes |
+| `airflow/dags/` | Production DAG definitions for ingestion, retraining, versioning, and drift monitoring |
+| `src/data/` | Data extraction, Open-Meteo ingestion, raw-data merge, and freshness validation |
+| `src/features/` | Feature-building logic used by training and model preparation |
+| `src/models/` | Winner training code, inference support, and modeling experiments |
+| `src/prediction_api/` | FastAPI app that loads the final model and exposes prediction/metadata/metrics endpoints |
+| `src/versioning/` | DVC snapshot logic and MLflow logging payload construction |
 | `src/monitoring/` | Evidently drift report generation |
-| `data/monitoring/` | DVC-tracked training reference dataset for drift comparisons |
+| `docker/airflow/` | Airflow Dockerfile and dependency pins aligned with drift-monitoring requirements |
+| `docker/prediction-api/` | Container image definition for the official FastAPI service |
+| `docker/model-fetcher/` | Kubernetes init-container image for retrieving DVC model artifacts |
+| `kubernetes/` | Kustomize entry point plus deployments, services, PVCs, HPAs, PDBs, and stateful services |
+| `data/raw/` | DVC-tracked source weather data used by training and Airflow |
+| `data/preprocessed/` | Prepared feature tables and aligned modeling datasets |
+| `data/monitoring/` | Reference/current data used for Evidently drift comparison |
+| `models/final_winner/` | Final served model artifact, metadata, and sample input |
+| `references/` | Climate references, station metadata, validation notes, and integration records |
+| `reports/versioning/` | Extraction, freshness, input, output, and DVC-status manifests emitted by automation |
+| `tests/` | Focused tests for Airflow automation, dependency pins, MLflow payloads, drift reporting, and API contract behavior |
 
 ***
 
 ## Served Model
 
-The repository serves a single final winner model for rainfall prediction.
-This artifact is the current production candidate used by the API, Airflow validation, DVC versioning, and Kubernetes deployment.
+The repository serves one final winner model for rainfall prediction.
+This model is the production candidate used by the API, Airflow validation, DVC versioning, MLflow logging, Evidently monitoring, and Kubernetes deployment.
+The served artifact is intentionally packaged with metadata and a sample input so every runtime reads the same contract.
 
 | Item | Value |
 |------|-------|
@@ -276,8 +373,30 @@ This artifact is the current production candidate used by the API, Airflow valid
 | Test rows | 28,297 |
 | Test period | 2015-12-04 to 2026-07-12 |
 
-The threshold is fixed in the metadata so the API, Airflow retraining checks, and monitoring reports use the same decision boundary.
-The final model metadata also stores the feature list, categorical feature list, numeric fill values, CatBoost parameters, sample input, and artifact paths.
+### Served artifact package
+
+| File | Role |
+|------|------|
+| `models/final_winner/winner_model.joblib` | Serialized CatBoost model used by FastAPI and validation checks |
+| `models/final_winner/metadata.json` | Feature order, categorical features, numeric fill values, threshold, model parameters, metrics, split dates, and artifact paths |
+| `models/final_winner/sample_input.json` | Valid example request body aligned with the model contract |
+| `data/monitoring/reference_dataset.csv` | Reference dataset used by Evidently drift reports |
+
+The threshold is fixed in metadata so the API, Airflow retraining checks, and monitoring reports use the same decision boundary.
+The model metadata also stores the feature list, categorical feature list, numeric fill values, CatBoost parameters, sample input path, and artifact paths.
+
+### Prediction contract
+
+The prediction contract is stable around the 68-feature order stored in metadata.
+FastAPI accepts a compact business-facing request with key weather fields, fills or derives the remaining model features from the saved contract where appropriate, and returns the binary rain decision with confidence.
+
+| Contract element | Production use |
+|------------------|----------------|
+| Feature order | Keeps training, inference, batch prediction, tests, and monitoring aligned |
+| Categorical feature list | Ensures CatBoost receives categorical columns consistently |
+| Numeric fill values | Allows inference to handle absent optional fields without changing the model schema |
+| Threshold | Converts model probability into the final `rain_tomorrow` decision |
+| Sample input | Provides a known-good payload for API checks, Airflow validation, and presentation demos |
 
 ***
 
