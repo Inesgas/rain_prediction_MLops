@@ -6,32 +6,32 @@ Scope: local workspace only
 
 ## Project Decision
 
-Andrey's FastAPI work is the official API layer for the project. The API source is `src/prediction_api/main.py`, and the root Docker stack is the deployment base for FastAPI, Nginx, Prometheus, Grafana, node-exporter, and Airflow.
+The FastAPI work is the official API layer for the project. The API source is `src/prediction_api/main.py`, and the root local integration stack is the integration base for FastAPI, Nginx, Prometheus, Grafana, node-exporter, and Airflow.
 
 The older local API draft in `src/models/api.py` remains in the workspace for now, but it is not the production API target. The Airflow validation step now points to the official FastAPI contract.
 
 No GitHub push and no DagsHub push were performed.
 
-## Why Andrey's Files Were Touched
+## Why API and Gateway Files Were Touched
 
-Andrey's FastAPI and Nginx work was kept as the project API and security gateway. The touched files were integration points, not replacements.
+The FastAPI and Nginx work was kept as the project API and security gateway. The touched files were integration points, not replacements.
 
 | File or area | Reason |
 |---|---|
 | `src/prediction_api/main.py` | Kept as the official API used by Docker, Airflow validation, CI contract checks, Prometheus metrics, and Kubernetes. |
-| `nginx/nginx.conf` | Kept as the authentication and rate-limit gateway. The upstream was aligned with Docker Compose service discovery so Nginx can reach scaled FastAPI containers through `fastapi:8502`. |
+| `nginx/nginx.conf` | Kept as the authentication and rate-limit gateway. The upstream was aligned with local stack service discovery so Nginx can reach scaled FastAPI containers through `fastapi:8502`. |
 | `docker-compose.yml` | Expanded into the local project stack that runs FastAPI, Nginx, Prometheus, Grafana, Airflow, and automatic prediction traffic together. |
-| `docker/prediction-api/api.Dockerfile` | Builds Andrey's official FastAPI application with the served model available inside the container. |
-| `tests/test_prediction_api_contract.py` | Adds a lightweight local contract check for Airflow and CI. It does not replace Andrey's running-stack Nginx/API tests. |
+| `docker/prediction-api/api.Dockerfile` | Builds the official FastAPI application with the served model available inside the container. |
+| `tests/test_prediction_api_contract.py` | Adds a lightweight local contract check for Airflow and CI. It does not replace the running-stack Nginx/API tests. |
 | `prometheus/` and `grafana/` | Connected the API metrics to local monitoring and made the dashboards load with live project metrics. |
 
-The API behavior, Nginx authentication flow, and role-based access decisions remain owned by the API/security work. The integration work only made those pieces usable from orchestration, monitoring, Docker Compose, and Kubernetes.
+The API behavior, Nginx authentication flow, and role-based access decisions remain owned by the API/security work. The integration work only made those pieces usable from orchestration, monitoring, the local integration stack, and Kubernetes.
 
 ## Repository Check
 
-The remote repository contained a newer `origin/main` with Andrey's additions. The important commit was:
+The remote repository contained a newer `origin/main` with API and project additions. The important commit was:
 
-`2f86ee2 Add all project files and update DVC config, Andrey Gerber`
+`2f86ee2 Add all project files and update DVC config`
 
 The added stack contained:
 
@@ -74,7 +74,7 @@ The local model artifact exists in the workspace, so the API can load the traine
 
 ## Nginx Layer
 
-Andrey's Nginx configuration remains the security gateway for the API. It provides:
+The Nginx configuration remains the security gateway for the API. It provides:
 
 - HTTPS entry point
 - Basic Authentication
@@ -83,7 +83,7 @@ Andrey's Nginx configuration remains the security gateway for the API. It provid
 - public access for health, locations, docs, and OpenAPI schema
 - protected access for prediction, model metadata, and metrics
 
-The local Docker Compose upstream was adjusted to use the Compose service name:
+The local stack upstream was adjusted to use the service name:
 
 `fastapi:8502`
 
@@ -93,7 +93,7 @@ The certificate files are treated as local runtime files under:
 
 Only `nginx/certs/.gitkeep` is tracked. Certificate keys and certificate files are ignored locally.
 
-## Docker Compose Stack
+## Local Integration Stack
 
 The root `docker-compose.yml` is now the project-level orchestration file.
 
@@ -152,7 +152,7 @@ The API validation task now uses:
 
 `tests/test_prediction_api_contract.py`
 
-This keeps the Airflow pipeline aligned with Andrey's official FastAPI app.
+This keeps the Airflow pipeline aligned with the official FastAPI app.
 
 ## Daily Data Automation
 
@@ -196,7 +196,7 @@ It checks:
 
 This test is suitable for Airflow because it does not require the full HTTPS Nginx stack to be running.
 
-Andrey's original integration tests remain in the root `tests/` folder. Those tests target the running Docker/Nginx environment and are better suited for the Docker or CI stage.
+The original integration tests remain in the root `tests/` folder. Those tests target the running local Nginx/API environment and are better suited for the local integration or CI stage.
 
 ## Screenshots
 
@@ -218,10 +218,10 @@ Daily ingestion setup screenshots are stored in:
 
 The local project now has:
 
-- Andrey's FastAPI app as the official API layer
+- FastAPI app as the official API layer
 - Nginx as the security gateway
 - Prometheus and Grafana as the monitoring stack
-- Airflow included in the root Docker Compose stack
+- Airflow included in the root local integration stack
 - Airflow DAG validation aligned to the official FastAPI app
 - local DVC versioning for data and model artifacts
 - daily ingestion separated from historical Kaggle ingestion

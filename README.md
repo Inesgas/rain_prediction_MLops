@@ -2,7 +2,7 @@
 
 <p align="center">
   <b>Production-style MLOps for Australian rainfall prediction</b><br>
-  FastAPI | Nginx | Airflow | MLflow | DVC | Docker Compose | Kubernetes
+  FastAPI | Airflow | MLflow | DVC | Container Images | Kubernetes
 </p>
 
 <p align="center">
@@ -10,8 +10,8 @@
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-API-009688">
   <img alt="MLflow" src="https://img.shields.io/badge/MLflow-Tracking-0194E2">
   <img alt="DVC" src="https://img.shields.io/badge/DVC-Versioning-13ADC7">
-  <img alt="Docker" src="https://img.shields.io/badge/Docker-Compose-2496ED">
-  <img alt="Kubernetes" src="https://img.shields.io/badge/Kubernetes-Orchestration-326CE5">
+  <img alt="Container Images" src="https://img.shields.io/badge/Images-Packaging-2496ED">
+  <img alt="Kubernetes" src="https://img.shields.io/badge/Kubernetes-Deployment-326CE5">
 </p>
 
 ***
@@ -26,7 +26,7 @@
 - [Served Model](#served-model)
 - [API](#api)
 - [Environment and Reproducibility Context](#environment-and-reproducibility-context)
-- [Docker Compose](#docker-compose)
+- [Local Integration Context](#local-integration-context)
 - [Kubernetes](#kubernetes)
 - [Airflow Pipelines](#airflow-pipelines)
 - [DVC Artifact Versioning](#dvc-artifact-versioning)
@@ -53,7 +53,7 @@ This README is written as the project report: it explains what was built, what e
 - A final CatBoost model package with a stable 68-feature prediction contract
 - Data and model artifact versioning with **DVC** and DagsHub remote storage
 - Automated training, versioning, and drift-monitoring workflows with **Airflow**
-- Local integration with **Docker Compose**
+- A separate local integration context for same-machine checks where the existing stack needs it
 - Production-style orchestration with **Kubernetes**, PVC-backed Airflow state, HPA/PDB resources, and service separation
 - Integration points with FastAPI, Nginx, MLflow, Evidently, Grafana, and Prometheus where they connect to the DVC, Airflow, Kubernetes, and data pipeline work
 
@@ -91,15 +91,15 @@ Airflow automated workflows
         +---------------------> Evidently drift reports
         |
         v
-Docker Compose and Kubernetes runtime
+Kubernetes runtime
 ```
 
-### Deployment modes
+### Runtime roles
 
-| Mode | Purpose | Main Entry Point |
-|------|---------|------------------|
-| Docker Compose | Local development and integrated service testing | `docker-compose.yml` |
-| Kubernetes | Production-style local deployment with scaling and service separation | `kubernetes/kustomization.yaml` |
+| Runtime area | Purpose | Main Entry Point |
+|--------------|---------|------------------|
+| Kubernetes | Production-style deployment with separated services, persistent state, scaling hooks, and service reachability | `kubernetes/kustomization.yaml` |
+| Local integration context | Same-machine validation for services that already exist in the repository stack | `docker-compose.yml` |
 
 ***
 
@@ -158,7 +158,7 @@ The data science layer produces the assets that the MLOps layer operates:
 ## Production MLOps Contribution
 
 The MLOps contribution turns the data science result into an operating workflow.
-Instead of only storing a model file, the project now has a reproducible path for extracting data, retraining, versioning artifacts, logging model metadata, checking drift, and running the system in Docker and Kubernetes.
+Instead of only storing a model file, the project now has a reproducible path for extracting data, retraining, versioning artifacts, logging model metadata, checking drift, packaging services as container images, and running the system through Kubernetes.
 
 The production layer focused on three responsibilities:
 
@@ -177,7 +177,7 @@ The project was reorganized so that each production action leaves an auditable t
 | Artifact versioning | Raw data, model artifacts, feature metadata, sample input, and DVC status are recorded before and after training. |
 | Automated orchestration | Airflow tasks were split into extraction, DVC pointer updates, local artifact checks, freshness checks, training, output snapshots, tracking handoff, API contract validation, and status recording. |
 | Runtime separation | Kubernetes separates Airflow webserver, scheduler, workers, Postgres, Redis, Pushgateway, and service endpoints instead of running everything as one local process. |
-| Portability | Docker and Kubernetes share the same schedules, environment variables, DVC targets, and model artifact paths so the workflow behaves consistently across local and cluster runtimes. |
+| Portability | Container images, Airflow settings, Kubernetes manifests, DVC targets, and model artifact paths stay aligned so the workflow behaves consistently across machines and clusters. |
 | Safety of automation | DAGs update local artifacts and reports, but remote DVC/Git publishing remains a deliberate merge-time action. |
 
 Final validation confirmed:
@@ -185,8 +185,8 @@ Final validation confirmed:
 | Check | Result |
 |-------|--------|
 | DVC remote status for committed raw/model pointers | Clean and synced |
-| Docker Airflow health | Scheduler and metadatabase healthy |
-| Docker Airflow DAG imports | No import errors |
+| Local Airflow health | Scheduler and metadatabase healthy |
+| Local Airflow DAG imports | No import errors |
 | Kubernetes manifest dry-run | Passed server-side dry-run |
 | Kubernetes pods | Airflow, Postgres, Redis, Pushgateway, and API pods running |
 | Kubernetes PVCs | Airflow project/logs, Postgres, and Redis PVCs bound |
@@ -303,7 +303,7 @@ This report records how the MLOps workflow depends on the running API service.
 
 | Integration point | Role |
 |-------------------|------|
-| Docker Compose | Runs the API service alongside Airflow, MLflow, monitoring, and the gateway |
+| Local integration context | Runs the API service alongside the existing local services for same-machine checks |
 | Kubernetes | Runs the API as a 3-replica deployment with HPA support |
 | Airflow | Uses the API health endpoint as part of the production validation path |
 | DVC/model artifacts | The API loads the DVC-tracked winner model and metadata contract |
@@ -332,10 +332,11 @@ This keeps the merged Git state consistent with the external artifact store.
 
 ***
 
-## Docker Compose
+## Local Integration Context
 
-Docker Compose is the local integration layer.
-It brings the project services together on one machine so integrated behavior can be validated before moving to Kubernetes.
+Docker Compose exists in the repository as a local integration context.
+It is useful for same-machine checks when the full service stack needs to be started together, but it is not the deployment target for the production-style architecture.
+The deployment/runtime target described in this report is Kubernetes.
 
 ### Integrated services
 
@@ -347,9 +348,9 @@ It brings the project services together on one machine so integrated behavior ca
 | Prometheus | `http://localhost:9090` |
 | Grafana | `http://localhost:3000` |
 
-### Docker Compose role in the project
+### Local integration role in the project
 
-| Area | What Docker Compose demonstrates |
+| Area | What the local stack demonstrates |
 |------|----------------------------------|
 | FastAPI serving | The model API runs with the mounted model artifact and health checks |
 | Airflow automation | Airflow runs the same DAGs used in Kubernetes validation |
@@ -358,7 +359,7 @@ It brings the project services together on one machine so integrated behavior ca
 | Prediction traffic | Synthetic prediction traffic keeps monitoring dashboards populated |
 | Gateway/dashboard integration | Nginx, Prometheus, and Grafana are integrated as gateway and monitoring services |
 
-During the final review, Docker Airflow, FastAPI, MLflow, Pushgateway, Grafana, node-exporter, and prediction traffic were running.
+During the final review, the local Airflow stack, FastAPI, MLflow, Pushgateway, Grafana, node-exporter, and prediction traffic were running.
 Nginx and Prometheus still had local mount cleanup items during final review, so this report keeps the detailed readiness discussion focused on Airflow, DVC, Kubernetes, and the data flow.
 
 ***
@@ -373,7 +374,7 @@ The manifests are still portable to K3s, Minikube, or a VM cluster, with non-Doc
 
 ### Kubernetes implementation process
 
-The Kubernetes work started from the local Docker workflow and separated the parts that need different lifecycle behavior in a cluster.
+The Kubernetes work separated the parts that need different lifecycle behavior in a cluster.
 Airflow was split into a webserver deployment, one scheduler deployment, and worker deployment so UI/API traffic, scheduling, and task execution can scale or restart independently.
 Postgres and Redis were added as stateful backing services for Airflow metadata and Celery task coordination.
 Pushgateway was added to the kustomization after the drift DAG already depended on it, closing the gap between the Airflow monitoring code and the Kubernetes runtime.
@@ -383,7 +384,7 @@ For that reason the manifests use PVCs for the shared project workspace, task lo
 The Airflow pods copy project code from the image seed into the PVC-backed workspace at startup, then set DVC into local no-SCM mode inside the pod workspace.
 That combination keeps DAG code fresh after image rebuilds while preserving runtime data and avoiding Git operations from inside the cluster.
 
-Scheduling was aligned with Docker Compose through the same environment variables:
+Scheduling was defined through Kubernetes environment variables and kept consistent with local defaults:
 
 | Schedule variable | Kubernetes value | Workflow |
 |-------------------|------------------|----------|
@@ -407,6 +408,10 @@ Scheduling was aligned with Docker Compose through the same environment variable
 | HPAs | API and Airflow worker autoscaling rules |
 | PDBs | Availability protection for API, webserver, scheduler, and workers |
 
+The default `kubernetes/kustomization.yaml` applies this API, Airflow, state, scaling, and Pushgateway bundle.
+Nginx, Prometheus, and Grafana manifests exist in the repository as integration material, but they are not part of the default kustomization.
+This keeps the Kubernetes deployment boundary clear: the production-style runtime validated for this report is FastAPI, Airflow, Postgres, Redis, Pushgateway, PVCs, HPA/PDB resources, and the DVC/model artifact path.
+
 ### Persistence design
 
 Kubernetes uses persistent volumes for state that survives pod replacement:
@@ -420,6 +425,9 @@ Kubernetes uses persistent volumes for state that survives pod replacement:
 
 The Airflow deployments also refresh code from the image into the PVC-backed workspace at pod startup.
 This prevents stale PVC contents from hiding new DAG support code after a rollout, while still avoiding accidental overwrite of trained data and model outputs.
+
+The Airflow project and log PVCs use `ReadWriteOnce`, which matched the Docker Desktop Kubernetes validation environment.
+For a multi-node K3s, Minikube, or VM cluster, the same design should be backed by storage that can satisfy the selected scheduling pattern: shared read-write storage for pods that may land on different nodes, or node placement rules that keep the Airflow pods using those PVCs on the same node.
 
 ### Portability design
 
@@ -460,7 +468,8 @@ Airflow is the orchestration layer for the production workflow.
 It connects data ingestion, retraining, DVC versioning, MLflow logging, and drift monitoring into scheduled and repeatable DAGs.
 
 The Airflow configuration was changed from a manual-only setup into an automated workflow.
-The DAGs are unpaused, scheduled, and visible in both Docker Airflow and Kubernetes Airflow.
+The DAGs are unpaused, scheduled, and visible in Kubernetes Airflow.
+The same DAG set was also checked in the local Airflow stack as a parity check.
 
 ### Airflow automation design
 
@@ -533,15 +542,16 @@ Workflow behavior:
 
 ### Airflow validation
 
-The Airflow layer was validated in both Docker Compose and Kubernetes.
+The Airflow layer was validated with Kubernetes as the production-style runtime target.
+The local stack was also checked as a development parity signal because the repository still includes a same-machine integration environment.
 
 | Validation | Result |
 |------------|--------|
-| Docker Airflow health | Scheduler and metadatabase healthy |
-| Docker Airflow DAG imports | No import errors |
-| Docker Airflow DAG list | Four expected DAGs loaded and unpaused |
-| Docker Airflow DVC check | Raw/model DVC targets up to date inside the Airflow runtime |
-| Docker Airflow MLflow check | Model logging dry-run found the model artifact, metadata, config, and sample input |
+| Local Airflow health | Scheduler and metadatabase healthy |
+| Local Airflow DAG imports | No import errors |
+| Local Airflow DAG list | Four expected DAGs loaded and unpaused |
+| Local Airflow DVC check | Raw/model DVC targets up to date inside the Airflow runtime |
+| Local Airflow MLflow check | Model logging dry-run found the model artifact, metadata, config, and sample input |
 | Kubernetes Airflow DAG imports | No import errors |
 | Kubernetes Airflow DAG list | Four expected DAGs loaded and unpaused |
 | Kubernetes Airflow DVC check | Raw/model DVC targets up to date inside the scheduler runtime |
@@ -600,18 +610,21 @@ MLflow records model metadata, metrics, parameters, and artifacts.
 This section is included because the Airflow and training flow connect to a tracking target.
 The project supports two tracking targets:
 
-- Local Docker MLflow for Airflow-triggered development and demonstration runs
+- Local MLflow for Airflow-triggered development and demonstration runs
 - DagsHub MLflow for hosted experiment tracking
 
-The Airflow integration was adjusted so local Docker Airflow uses the Docker MLflow service by default.
+The Airflow integration was adjusted so the local Airflow stack uses the local MLflow service by default.
 This avoids accidental DagsHub `403` failures when hosted MLflow credentials are not configured.
+
+In Kubernetes, Airflow uses `file:///opt/airflow/project/mlruns` in the default config map.
+That stores Kubernetes-triggered tracking output in the PVC-backed Airflow project workspace instead of requiring a separate MLflow server deployment in the default kustomization.
 
 | `AIRFLOW_MLFLOW_TRACKING_URI` | Airflow-triggered runs appear in | Manual training runs appear in |
 |-------------------------------|----------------------------------|--------------------------------|
 | `http://mlflow:5000` (default) | Local MLflow UI | DagsHub |
 | `https://dagshub.com/Inesgas/rain_prediction_MLops.mlflow` | DagsHub Experiments | DagsHub |
 
-MLflow dry-run validation was executed in Docker Airflow and Kubernetes Airflow.
+MLflow dry-run validation was executed in both local Airflow and Kubernetes Airflow.
 Both runtimes found the model artifact, metadata, config, and sample input and produced a valid logging payload.
 
 ***
@@ -681,13 +694,13 @@ Each successful training run writes:
 
 | Service | Deployment | URL | Username | Password | Notes |
 |---------|------------|-----|----------|----------|-------|
-| Airflow | Docker Compose root stack | `http://localhost:8080` | `admin` | `airflow` | Defined in `docker-compose.yml` |
+| Airflow | Local stack | `http://localhost:8080` | `admin` | `airflow` | Defined in `docker-compose.yml` |
 | Airflow | Legacy dev compose | `http://localhost:8080` | `airflow` | `airflow` | Defined in `src/docker/docker-compose-dev.yml` |
 | Airflow | Kubernetes | `http://localhost:18080` via port-forward | `admin` | `airflow` | Placeholder in `kubernetes/airflow-secret.yaml` |
-| MLflow | Docker Compose root stack | `http://localhost:5000` | none | none | Local tracking UI |
-| Grafana | Docker Compose | `http://localhost:3000` | `admin` | `admin` | Defined in compose |
-| Prometheus | Docker Compose | `http://localhost:9090` | none | none | Local monitoring only |
-| Nginx gateway | Docker Compose | `https://localhost` | `andrey`, `ines`, `gunter`, `admin` | stored as hashes | See `nginx/.htpasswd` |
+| MLflow | Local stack | `http://localhost:5000` | none | none | Local tracking UI |
+| Grafana | Local stack | `http://localhost:3000` | `admin` | `admin` | Local monitoring UI |
+| Prometheus | Local stack | `http://localhost:9090` | none | none | Local monitoring only |
+| Nginx gateway | Local stack | `https://localhost` | local `.htpasswd` users | stored as hashes | Local gateway file, not committed |
 
 The project separates committed configuration from local secrets.
 `.env`, `.dvc/config.local`, TLS certificates, and gateway password hashes are local runtime material and are not part of the committed model or orchestration report.
@@ -703,7 +716,7 @@ This section records the work behind the final state.
 |------|-------------|------------|
 | Airflow scheduling | End-to-end automation and drift monitoring were not fully scheduled in the earlier configuration | Airflow schedule variables were aligned so ingestion, E2E training/versioning, and drift monitoring run as automated DAGs |
 | Airflow dependencies | Drift monitoring required Evidently, Plotly, and Prometheus client support in the Airflow image | Airflow dependency pins and Dockerfile installation order were aligned with Airflow 2.10.5 constraints |
-| MLflow target | Docker Airflow could point to hosted DagsHub MLflow and fail without credentials | Docker Airflow now uses local MLflow by default through `AIRFLOW_MLFLOW_TRACKING_URI` |
+| MLflow target | Local Airflow could point to hosted DagsHub MLflow and fail without credentials | Local Airflow now uses local MLflow by default through `AIRFLOW_MLFLOW_TRACKING_URI` |
 | Kubernetes scheduler | Multiple Airflow schedulers caused duplicate serialized DAG writes and instability | Kubernetes Airflow scheduler was reduced to one stable replica |
 | Kubernetes PVC source refresh | PVC-backed Airflow pods could keep stale project code after image rebuilds | Airflow init containers now refresh source code from the image into the PVC-backed workspace |
 | Kubernetes Pushgateway | Drift DAG expected Pushgateway, but the Kubernetes stack did not include it earlier | Pushgateway deployment and service are included in `kubernetes/kustomization.yaml` |
