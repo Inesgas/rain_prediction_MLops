@@ -27,3 +27,42 @@ resources:
   # Ines scope: Pushgateway endpoint used by the Airflow drift-monitoring DAG.
   - pushgateway-deployment.yaml
   - pushgateway-service.yaml
+
+  # Gateway and observability stack: previously defined as manifests but never wired into the cluster.
+  - nginx-deployment.yaml
+  - nginx-service.yaml
+  - prometheus-deployment.yaml
+  - prometheus-service.yaml
+  - grafana-deployment.yaml
+  - grafana-service.yaml
+  - node-exporter-deployment.yaml
+  - node-exporter-service.yaml
+
+  # MLflow experiment tracking
+  - mlflow-pvc.yaml
+  - mlflow-deployment.yaml
+  - mlflow-service.yaml
+
+configMapGenerator: # Prometheus and Grafana configuration/dashboards, generated from files in ../deployment/.
+  - name: prometheus-config
+    namespace: rain-prediction
+    files:
+      - ../deployment/prometheus/prometheus.yml
+      - ../deployment/prometheus/rules/alert_rules.yml
+
+  - name: grafana-datasource
+    namespace: rain-prediction
+    files:
+      - ../deployment/grafana/provisioning/datasources/datasource.yaml
+
+  - name: grafana-dashboard-provider
+    namespace: rain-prediction
+    files:
+      - ../deployment/grafana/provisioning/dashboards/dashboard.yaml
+
+  - name: grafana-dashboards
+    namespace: rain-prediction
+    files:
+      - ../deployment/grafana/dashboards/API-dashboard.json
+      - ../deployment/grafana/dashboards/Model-dashboard.json
+      - ../deployment/grafana/dashboards/infra-dashboard.json

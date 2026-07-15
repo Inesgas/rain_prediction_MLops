@@ -311,7 +311,6 @@ rain_prediction_mlops/
 |-- reports/
 |   |-- figures/
 |   `-- versioning/              Airflow/DVC manifest output area
-|-- Slides/                      Final presentation deck artifacts
 |-- src/
 |   |-- config/                  Shared paths and constants
 |   |-- data/                    Extraction, merge, and freshness modules
