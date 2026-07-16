@@ -66,3 +66,11 @@ configMapGenerator: # Prometheus and Grafana configuration/dashboards, generated
       - ../deployment/grafana/dashboards/API-dashboard.json
       - ../deployment/grafana/dashboards/Model-dashboard.json
       - ../deployment/grafana/dashboards/infra-dashboard.json
+
+secretGenerator:
+  - name: nginx-tls-and-auth
+    namespace: rain-prediction
+    files:
+      - ../nginx/certs/nginx.crt
+      - ../nginx/certs/nginx.key
+      - ../nginx/.htpasswd

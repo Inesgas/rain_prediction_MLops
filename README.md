@@ -734,8 +734,9 @@ The project supports two tracking targets:
 The Airflow integration was adjusted so the local Airflow stack uses the local MLflow service by default.
 This avoids accidental DagsHub `403` failures when hosted MLflow credentials are not configured.
 
-In Kubernetes, Airflow uses `file:///opt/airflow/project/mlruns` in the default config map.
-That stores Kubernetes-triggered tracking output in the PVC-backed Airflow project workspace instead of requiring a separate MLflow server deployment in the default kustomization.
+In Kubernetes, Airflow now points to a dedicated MLflow service deployed inside the cluster (`kubernetes/mlflow-deployment.yaml`, `kubernetes/mlflow-service.yaml`, backed by `kubernetes/mlflow-pvc.yaml` for persistent run/artifact storage).
+`MLFLOW_TRACKING_URI` in `kubernetes/airflow-configmap.yaml` was changed from the local file store (`file:///opt/airflow/project/mlruns`) to `http://mlflow:5000`, so Kubernetes-triggered runs are tracked the same way as local Airflow runs, through a real MLflow tracking server.
+The MLflow UI is reachable through the Nginx gateway at `/mlflow/`, protected by the same basic-auth mechanism as Grafana and Prometheus.
 
 | `AIRFLOW_MLFLOW_TRACKING_URI` | Airflow-triggered runs appear in | Manual training runs appear in |
 |-------------------------------|----------------------------------|--------------------------------|
