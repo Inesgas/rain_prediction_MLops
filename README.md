@@ -738,6 +738,21 @@ In Kubernetes, Airflow now points to a dedicated MLflow service deployed inside 
 `MLFLOW_TRACKING_URI` in `kubernetes/airflow-configmap.yaml` was changed from the local file store (`file:///opt/airflow/project/mlruns`) to `http://mlflow:5000`, so Kubernetes-triggered runs are tracked the same way as local Airflow runs, through a real MLflow tracking server.
 The MLflow UI is reachable through the Nginx gateway at `/mlflow/`, protected by the same basic-auth mechanism as Grafana and Prometheus.
 
+The Nginx TLS certificate, private key, and basic-auth file remain local secret material and are not committed.
+Before applying the full Kubernetes stack, the `nginx-tls-and-auth` secret is created from the local files at `nginx/certs/nginx.crt`, `nginx/certs/nginx.key`, and `nginx/.htpasswd`.
+Keeping this secret outside `kubernetes/kustomization.yaml` allows the manifests to render from a clean checkout while still requiring the runtime secret before the gateway pod starts.
+
+```bash
+kubectl apply -f kubernetes/namespace.yaml
+kubectl create secret generic nginx-tls-and-auth \
+  --namespace rain-prediction \
+  --from-file=nginx.crt=nginx/certs/nginx.crt \
+  --from-file=nginx.key=nginx/certs/nginx.key \
+  --from-file=.htpasswd=nginx/.htpasswd \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl kustomize kubernetes --load-restrictor LoadRestrictionsNone | kubectl apply -f -
+```
+
 | `AIRFLOW_MLFLOW_TRACKING_URI` | Airflow-triggered runs appear in | Manual training runs appear in |
 |-------------------------------|----------------------------------|--------------------------------|
 | `http://mlflow:5000` (default) | Local MLflow UI | DagsHub |

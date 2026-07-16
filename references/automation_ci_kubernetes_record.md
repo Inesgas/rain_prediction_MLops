@@ -206,6 +206,6 @@ Airflow DVC validation passed inside the Kubernetes worker:
 | `dvc status` recognizes the workspace | Passed |
 | Exact failed task command, `python -m src.versioning.dvc_versioning dvc-add --target data/raw/weatherAUS.csv` | Passed |
 
-The final manifest dry run also passed:
+The final manifest dry run also passed after the runtime-only Nginx secret was created in the namespace:
 
-`kustomize build kubernetes/ --load-restrictor LoadRestrictionsNone | kubectl apply -f - --dry-run=client`
+`kubectl kustomize kubernetes --load-restrictor LoadRestrictionsNone | kubectl apply -f - --dry-run=client`
