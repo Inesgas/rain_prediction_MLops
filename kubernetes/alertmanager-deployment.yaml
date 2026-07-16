@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: rain-prediction
+  labels:
+    app: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--config.file=/etc/alertmanager/alertmanager.yml"
+            - "--web.external-url=https://localhost/alertmanager/"
+            - "--web.route-prefix=/alertmanager/"
+          ports:
+            - containerPort: 9093
+              name: http
+          volumeMounts:
+            - name: alertmanager-config
+              mountPath: /etc/alertmanager/alertmanager.yml
+              subPath: alertmanager.yml
+      volumes:
+        - name: alertmanager-config
+          configMap:
+            name: alertmanager-config

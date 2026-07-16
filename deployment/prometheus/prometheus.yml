@@ -3,6 +3,11 @@ global:
   evaluation_interval: 15s
 rule_files:
   - "rules/alert_rules.yml"
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'alertmanager:9093'
 scrape_configs:
   # Scrape each FastAPI pod individually instead of the Service ClusterIP.
   # A Service address load-balances each scrape to a random pod, which makes
