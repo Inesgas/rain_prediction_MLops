@@ -42,8 +42,7 @@ spec:
               port: 5000
             initialDelaySeconds: 20
             periodSeconds: 30
-
-            volumeMounts:
+          volumeMounts:
             - name: mlflow-data
               mountPath: /mlflow
       volumes:
