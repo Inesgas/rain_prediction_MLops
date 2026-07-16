@@ -10,6 +10,7 @@ from typing import Iterable
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -114,6 +115,31 @@ TOOL_LOGOS: dict[str, str] = {
 
 def html(markup: str) -> None:
     st.markdown(markup, unsafe_allow_html=True)
+
+
+def scroll_to_top_on_page_change(selected: str) -> None:
+    if st.session_state.get("_last_rendered_page") == selected:
+        return
+    st.session_state["_last_rendered_page"] = selected
+    components.html(
+        """
+        <script>
+        setTimeout(() => {
+          const doc = window.parent.document;
+          const main = Array.from(doc.querySelectorAll("section, div")).find((el) => {
+            const cls = String(el.className || "");
+            return el.scrollHeight > el.clientHeight + 300 && cls.includes("stMain");
+          });
+          if (main && typeof main.scrollTo === "function") {
+            main.scrollTo({ top: 0, left: 0, behavior: "auto" });
+          }
+          doc.documentElement.scrollTop = 0;
+          doc.body.scrollTop = 0;
+        }, 50);
+        </script>
+        """,
+        height=0,
+    )
 
 
 def fmt_pct(value: object, digits: int = 1) -> str:
@@ -241,10 +267,34 @@ def inject_theme() -> None:
           from { opacity: 0; transform: translateY(10px); }
           to { opacity: 1; transform: none; }
         }
+        .stTabs [data-baseweb="tab-list"] {
+          gap: .35rem;
+          overflow-x: auto;
+          padding: .1rem 0 .35rem;
+          scrollbar-width: thin;
+        }
         .stTabs [data-baseweb="tab"] {
-          font-size: 1.02rem;
-          font-weight: 700;
-          padding: .55rem 1.05rem;
+          flex: 0 0 auto;
+          min-height: 2.2rem;
+          height: 2.2rem;
+          border-radius: 999px;
+          padding: .38rem .72rem;
+          margin: 0;
+          background: rgba(255,255,255,.72);
+          border: 1px solid rgba(216,226,227,.95);
+          box-shadow: 0 6px 16px rgba(23,56,72,.07);
+        }
+        .stTabs [data-baseweb="tab"] p {
+          margin: 0;
+          color: var(--ink);
+          font-size: .86rem;
+          font-weight: 800;
+          line-height: 1;
+          white-space: nowrap;
+        }
+        .stTabs [data-baseweb="tab"][aria-selected="true"] {
+          background: rgba(31,118,210,.12);
+          border-color: rgba(31,118,210,.48);
         }
         [data-testid="stImage"] img {
           border-radius: 14px;
@@ -261,11 +311,15 @@ def inject_theme() -> None:
           padding: .55rem 1.3rem;
           border-radius: 10px;
         }
+        .slide-badge-row {
+          display:flex;
+          justify-content:flex-end;
+          margin:.1rem 0 .35rem;
+        }
         .slide-badge {
-          position: fixed;
-          top: 64px;
-          right: 22px;
-          z-index: 999;
+          display:inline-flex;
+          align-items:center;
+          width:fit-content;
           background: rgba(23,56,72,.88);
           color: #eaf2f4;
           font-size: .82rem;
@@ -303,10 +357,20 @@ def inject_theme() -> None:
           color:#f8faf7;
           font-weight:700;
         }
+        section[data-testid="stSidebar"] div[role="radiogroup"] {
+          gap: .22rem;
+        }
         section[data-testid="stSidebar"] div[role="radiogroup"] label {
-          border-radius: 10px;
-          padding: .34rem .46rem;
-          margin: .08rem 0;
+          min-height: 2.05rem;
+          border-radius: 999px;
+          padding: .28rem .5rem;
+          margin: .04rem 0;
+        }
+        section[data-testid="stSidebar"] div[role="radiogroup"] label p {
+          font-size: .82rem;
+          font-weight: 800;
+          line-height: 1.1;
+          white-space: nowrap;
         }
         section[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) {
           background: rgba(255,255,255,.15);
@@ -499,43 +563,47 @@ def inject_theme() -> None:
         }
         .result-panel {
           border-radius:8px;
-          padding:1.1rem 1.2rem;
+          padding:1.25rem 1.45rem;
           color:white;
-          min-height:178px;
+          min-height:206px;
           background: linear-gradient(135deg, var(--green), var(--teal));
+          box-shadow:0 18px 42px rgba(23,56,72,.13);
         }
         .result-panel.rain {
           background: linear-gradient(135deg, var(--blue), var(--teal));
         }
         .result-panel .eyebrow {
           color:rgba(255,255,255,.80);
-          font-size:.78rem;
+          font-size:.74rem;
           text-transform:uppercase;
           letter-spacing:.08em;
           font-weight:850;
         }
         .result-panel .answer {
           color:white;
-          font-size:2.15rem;
-          line-height:1.03;
-          margin:.25rem 0;
+          font-size:clamp(1.9rem, 2.35vw, 2.55rem);
+          line-height:1.08;
+          margin:.32rem 0 .22rem;
           font-weight:950;
+          text-wrap:balance;
         }
         .result-panel .copy {
           color:rgba(255,255,255,.92);
           font-weight:760;
+          line-height:1.32;
         }
         .mini-grid {
           display:grid;
-          grid-template-columns:repeat(3,minmax(0,1fr));
-          gap:.55rem;
-          margin-top:.9rem;
+          grid-template-columns:repeat(auto-fit,minmax(148px,1fr));
+          gap:.62rem;
+          margin-top:1rem;
         }
         .mini-grid div {
           border:1px solid rgba(255,255,255,.35);
           border-radius:8px;
-          padding:.55rem .6rem;
+          padding:.62rem .68rem;
           color:white;
+          min-width:0;
         }
         .mini-grid span {
           display:block;
@@ -543,6 +611,58 @@ def inject_theme() -> None:
           text-transform:uppercase;
           font-size:.7rem;
           font-weight:850;
+        }
+        .feature-snapshot {
+          display:grid;
+          grid-template-columns:repeat(auto-fit,minmax(112px,1fr));
+          gap:.55rem;
+          margin:.7rem 0 .2rem;
+        }
+        .feature-snapshot div {
+          border:1px solid var(--line);
+          background:rgba(255,255,255,.95);
+          border-radius:8px;
+          padding:.65rem .72rem;
+          box-shadow:0 12px 28px rgba(23,56,72,.07);
+        }
+        .feature-snapshot span {
+          display:block;
+          color:var(--muted);
+          font-size:.68rem;
+          text-transform:uppercase;
+          letter-spacing:.05em;
+          font-weight:850;
+        }
+        .feature-snapshot b {
+          display:block;
+          color:var(--ink);
+          font-size:.98rem;
+          line-height:1.18;
+          margin-top:.22rem;
+          overflow-wrap:anywhere;
+        }
+        .map-heading {
+          display:block;
+          gap:1rem;
+          margin:0 0 .35rem;
+          padding:.58rem .72rem;
+          border:1px solid rgba(31,118,210,.16);
+          border-left:5px solid var(--blue);
+          border-radius:8px;
+          background:rgba(239,248,251,.88);
+        }
+        .map-heading b {
+          display:block;
+          color:var(--ink);
+          font-size:.96rem;
+        }
+        .map-heading span {
+          display:block;
+          color:var(--muted);
+          font-size:.74rem;
+          font-weight:720;
+          text-align:left;
+          margin-top:.12rem;
         }
         .stage-grid {
           display:grid;
@@ -603,6 +723,413 @@ def inject_theme() -> None:
         .demo-card span {
           color:var(--muted);
           line-height:1.42;
+        }
+        .interactive-panel {
+          border:1px solid var(--line);
+          background:rgba(255,255,255,.95);
+          border-radius:10px;
+          box-shadow:0 18px 42px rgba(23,56,72,.08);
+          padding:1rem 1.12rem;
+          margin:.75rem 0 1rem;
+        }
+        .interactive-panel h3 {
+          margin:.05rem 0 .35rem;
+          color:var(--ink);
+          font-size:1.28rem;
+        }
+        .interactive-panel p {
+          margin:.22rem 0;
+        }
+        .flow-rail {
+          display:grid;
+          grid-template-columns:repeat(auto-fit,minmax(118px,1fr));
+          gap:.5rem;
+          margin:.65rem 0 1rem;
+        }
+        .flow-step {
+          position:relative;
+          border:1px solid var(--line);
+          border-top:4px solid var(--c);
+          background:rgba(255,255,255,.86);
+          border-radius:8px;
+          padding:.65rem .7rem;
+          min-height:74px;
+        }
+        .flow-step.active {
+          background:linear-gradient(180deg, rgba(255,255,255,1), rgba(238,247,251,.98));
+          box-shadow:0 14px 34px rgba(23,56,72,.14);
+          transform:translateY(-2px);
+        }
+        .flow-step small {
+          color:var(--c);
+          display:block;
+          font-weight:950;
+          text-transform:uppercase;
+          font-size:.68rem;
+          letter-spacing:.06em;
+        }
+        .flow-step b {
+          color:var(--ink);
+          display:block;
+          line-height:1.15;
+          margin-top:.2rem;
+        }
+        .detail-grid {
+          display:grid;
+          grid-template-columns:1.1fr .9fr;
+          gap:.9rem;
+          align-items:stretch;
+        }
+        .evidence-list {
+          display:grid;
+          gap:.45rem;
+          margin-top:.65rem;
+        }
+        .evidence-list div {
+          border-left:4px solid var(--c);
+          background:#f6fafb;
+          border-radius:8px;
+          padding:.55rem .7rem;
+          color:var(--muted);
+          font-weight:720;
+        }
+        .artifact-pill-row {
+          display:flex;
+          flex-wrap:wrap;
+          gap:.45rem;
+          margin-top:.7rem;
+        }
+        .artifact-pill-row span {
+          border:1px solid var(--line);
+          border-radius:999px;
+          background:white;
+          padding:.25rem .58rem;
+          color:var(--ink);
+          font-size:.82rem;
+          font-weight:820;
+        }
+        .monitor-meter {
+          display:grid;
+          grid-template-columns:repeat(4,minmax(0,1fr));
+          gap:.55rem;
+          margin:.65rem 0 1rem;
+        }
+        .monitor-meter div {
+          border:1px solid var(--line);
+          border-radius:8px;
+          background:white;
+          padding:.65rem .7rem;
+          color:var(--ink);
+          min-height:82px;
+        }
+        .monitor-meter div.active {
+          border-color:var(--c);
+          box-shadow:0 12px 30px rgba(23,56,72,.12);
+          background:linear-gradient(180deg,#ffffff,#f2faf8);
+        }
+        .monitor-meter small {
+          color:var(--c);
+          font-weight:950;
+          text-transform:uppercase;
+          font-size:.68rem;
+        }
+        .monitor-meter b {
+          display:block;
+          margin:.18rem 0;
+        }
+        .pipeline-figure {
+          position:relative;
+          overflow:hidden;
+          border:1px solid rgba(31,118,210,.18);
+          border-radius:10px;
+          background:
+            radial-gradient(circle at 15% 10%, rgba(39,132,85,.11), transparent 28%),
+            radial-gradient(circle at 86% 24%, rgba(31,118,210,.12), transparent 26%),
+            linear-gradient(180deg, rgba(255,255,255,.96), rgba(245,250,250,.94));
+          box-shadow:0 20px 48px rgba(23,56,72,.09);
+          padding:1rem;
+          margin:.8rem 0 1rem;
+        }
+        .pipeline-rail {
+          display:flex;
+          align-items:stretch;
+          gap:.42rem;
+        }
+        .pipeline-node {
+          flex:1 1 0;
+          min-width:0;
+          border:1px solid var(--line);
+          border-top:5px solid var(--c);
+          border-radius:10px;
+          background:rgba(255,255,255,.92);
+          padding:.78rem .72rem;
+          min-height:132px;
+          box-shadow:0 10px 24px rgba(23,56,72,.06);
+          transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+        }
+        .pipeline-node.active {
+          transform:translateY(-4px);
+          border-color:var(--c);
+          box-shadow:0 20px 40px rgba(23,56,72,.15);
+          background:linear-gradient(180deg,#fff,#f1faf8);
+        }
+        .pipeline-node .node-head {
+          display:flex;
+          align-items:center;
+          gap:.45rem;
+          margin-bottom:.45rem;
+        }
+        .pipeline-node small {
+          display:block;
+          color:var(--c);
+          text-transform:uppercase;
+          letter-spacing:.06em;
+          font-size:.66rem;
+          font-weight:950;
+        }
+        .pipeline-node b {
+          display:block;
+          color:var(--ink);
+          font-size:.98rem;
+          line-height:1.12;
+        }
+        .pipeline-node span {
+          display:block;
+          color:var(--muted);
+          font-size:.78rem;
+          line-height:1.28;
+          margin-top:.38rem;
+        }
+        .pipe-arrow {
+          flex:0 0 1.3rem;
+          align-self:center;
+          color:rgba(23,56,72,.42);
+          font-size:1.45rem;
+          font-weight:900;
+          text-align:center;
+        }
+        .loop-figure {
+          display:grid;
+          grid-template-columns:1fr .9fr 1fr;
+          grid-template-rows:auto auto auto;
+          gap:.72rem;
+          align-items:stretch;
+          border:1px solid rgba(227,27,35,.16);
+          border-radius:10px;
+          background:
+            radial-gradient(circle at 50% 50%, rgba(227,27,35,.08), transparent 28%),
+            linear-gradient(180deg, rgba(255,255,255,.98), rgba(249,250,247,.95));
+          padding:1rem;
+          box-shadow:0 18px 42px rgba(23,56,72,.08);
+          margin:.8rem 0 1rem;
+        }
+        .loop-core {
+          grid-column:2;
+          grid-row:2;
+          border:2px dashed rgba(23,56,72,.22);
+          border-radius:999px;
+          min-height:136px;
+          display:flex;
+          flex-direction:column;
+          align-items:center;
+          justify-content:center;
+          text-align:center;
+          padding:1rem;
+          background:#fff;
+        }
+        .loop-core b {
+          color:var(--ink);
+          font-size:1.04rem;
+        }
+        .loop-core span {
+          color:var(--muted);
+          font-size:.82rem;
+          margin-top:.25rem;
+        }
+        .loop-node {
+          border:1px solid var(--line);
+          border-left:5px solid var(--c);
+          border-radius:10px;
+          background:rgba(255,255,255,.94);
+          padding:.72rem .8rem;
+          min-height:116px;
+          box-shadow:0 12px 28px rgba(23,56,72,.07);
+        }
+        .loop-node.active {
+          border-color:var(--c);
+          box-shadow:0 20px 42px rgba(23,56,72,.15);
+          background:linear-gradient(180deg,#fff,#fff8f6);
+        }
+        .loop-node small {
+          color:var(--c);
+          text-transform:uppercase;
+          letter-spacing:.06em;
+          font-weight:950;
+          font-size:.66rem;
+        }
+        .loop-node b {
+          display:block;
+          color:var(--ink);
+          margin:.2rem 0;
+          font-size:.98rem;
+        }
+        .loop-node span {
+          color:var(--muted);
+          font-size:.8rem;
+          line-height:1.28;
+        }
+        .loop-ingestion { grid-column:1; grid-row:1; }
+        .loop-versioning { grid-column:3; grid-row:1; }
+        .loop-e2e { grid-column:1; grid-row:3; }
+        .loop-drift { grid-column:3; grid-row:3; }
+        .loop-arrow {
+          color:rgba(23,56,72,.34);
+          font-weight:950;
+          align-self:center;
+          justify-self:center;
+          font-size:1.15rem;
+        }
+        .loop-arrow.a1 { grid-column:2; grid-row:1; }
+        .loop-arrow.a2 { grid-column:3; grid-row:2; }
+        .loop-arrow.a3 { grid-column:2; grid-row:3; }
+        .loop-arrow.a4 { grid-column:1; grid-row:2; }
+        .blueprint-figure {
+          border:1px solid rgba(39,132,85,.18);
+          border-radius:10px;
+          background:
+            linear-gradient(90deg, rgba(31,118,210,.09), rgba(39,132,85,.08), rgba(227,27,35,.07)),
+            rgba(255,255,255,.94);
+          box-shadow:0 18px 42px rgba(23,56,72,.08);
+          padding:1rem;
+          margin:.35rem 0 1rem;
+        }
+        .blueprint-grid {
+          display:grid;
+          grid-template-columns:repeat(3,minmax(0,1fr));
+          gap:.8rem;
+        }
+        .blueprint-lane {
+          border:1px solid var(--line);
+          border-top:5px solid var(--c);
+          border-radius:10px;
+          background:rgba(255,255,255,.92);
+          padding:.85rem;
+          min-height:250px;
+        }
+        .blueprint-lane h3 {
+          display:flex;
+          align-items:center;
+          gap:.5rem;
+          margin:.1rem 0 .7rem;
+          font-size:1.05rem;
+          color:var(--ink);
+        }
+        .blueprint-items {
+          display:grid;
+          gap:.55rem;
+        }
+        .blueprint-pill {
+          display:grid;
+          grid-template-columns:auto 1fr;
+          gap:.55rem;
+          align-items:center;
+          border:1px solid rgba(216,226,227,.95);
+          border-radius:10px;
+          background:#fff;
+          padding:.55rem .62rem;
+        }
+        .blueprint-pill.active {
+          border-color:var(--c);
+          box-shadow:0 14px 30px rgba(23,56,72,.13);
+          transform:translateY(-2px);
+        }
+        .blueprint-pill b {
+          color:var(--ink);
+          display:block;
+          line-height:1.16;
+        }
+        .blueprint-pill span {
+          color:var(--muted);
+          font-size:.78rem;
+          line-height:1.28;
+        }
+        .ci-figure {
+          border:1px solid rgba(32,136,255,.18);
+          border-radius:10px;
+          background:
+            radial-gradient(circle at 18% 18%, rgba(32,136,255,.12), transparent 30%),
+            radial-gradient(circle at 78% 20%, rgba(39,132,85,.11), transparent 25%),
+            rgba(255,255,255,.95);
+          box-shadow:0 18px 42px rgba(23,56,72,.08);
+          padding:1rem;
+          margin:.8rem 0 1rem;
+        }
+        .ci-track {
+          display:grid;
+          grid-template-columns:repeat(5,minmax(0,1fr));
+          gap:.62rem;
+          align-items:stretch;
+        }
+        .ci-step {
+          position:relative;
+          border:1px solid var(--line);
+          border-top:5px solid var(--c);
+          border-radius:10px;
+          background:#fff;
+          padding:.72rem;
+          min-height:142px;
+          box-shadow:0 12px 28px rgba(23,56,72,.07);
+        }
+        .ci-step:not(:last-child)::after {
+          content:"→";
+          position:absolute;
+          top:50%;
+          right:-.62rem;
+          transform:translateY(-50%);
+          color:rgba(23,56,72,.4);
+          font-weight:950;
+          z-index:2;
+        }
+        .ci-step .node-head {
+          display:flex;
+          align-items:center;
+          gap:.45rem;
+          margin-bottom:.48rem;
+        }
+        .ci-step small {
+          color:var(--c);
+          display:block;
+          text-transform:uppercase;
+          letter-spacing:.06em;
+          font-size:.66rem;
+          font-weight:950;
+        }
+        .ci-step b {
+          color:var(--ink);
+          display:block;
+          line-height:1.15;
+        }
+        .ci-step span {
+          color:var(--muted);
+          display:block;
+          font-size:.8rem;
+          line-height:1.32;
+          margin-top:.28rem;
+        }
+        .ci-gates {
+          display:flex;
+          flex-wrap:wrap;
+          gap:.45rem;
+          margin-top:.8rem;
+        }
+        .ci-gates span {
+          border:1px solid var(--line);
+          border-radius:999px;
+          background:#f8fbfc;
+          color:var(--ink);
+          font-size:.8rem;
+          font-weight:820;
+          padding:.28rem .62rem;
         }
         .handoff {
           border:1px solid rgba(31,118,210,.22);
@@ -737,7 +1264,23 @@ def inject_theme() -> None:
         @media(max-width:980px) {
           .hero h1 { font-size:1.9rem; }
           .demo-grid { grid-template-columns:1fr; }
+          .detail-grid { grid-template-columns:1fr; }
+          .monitor-meter { grid-template-columns:1fr 1fr; }
           .mini-grid { grid-template-columns:1fr; }
+          .feature-snapshot { grid-template-columns:1fr 1fr; }
+          .pipeline-rail { flex-direction:column; }
+          .pipe-arrow { transform:rotate(90deg); }
+          .pipeline-node { min-height:auto; }
+          .loop-figure { grid-template-columns:1fr; grid-template-rows:auto; }
+          .loop-core, .loop-ingestion, .loop-versioning, .loop-e2e, .loop-drift {
+            grid-column:1;
+            grid-row:auto;
+          }
+          .loop-arrow { display:none; }
+          .blueprint-grid { grid-template-columns:1fr; }
+          .blueprint-lane { min-height:auto; }
+          .ci-track { grid-template-columns:1fr; }
+          .ci-step:not(:last-child)::after { display:none; }
         }
         </style>
         """
@@ -834,16 +1377,16 @@ def hero() -> None:
         [
             ("Python", "Py", "#3776ab"),
             ("Pandas", "pd", "#150458"),
-            ("Scikit-learn", "sk", "#f7931e"),
             ("CatBoost", "CB", "#c99700"),
             ("DVC", "DVC", "#945dd6"),
             ("MLflow", "ML", "#0194e2"),
             ("Airflow", "AF", "#017cee"),
-            ("PostgreSQL", "PG", "#4169e1"),
-            ("Redis", "Rd", "#ff4438"),
             ("FastAPI", "FA", "#009688"),
             ("Evidently", "EV", "#e31b23"),
             ("Pushgateway", "PW", "#f39c12"),
+            ("Prometheus", "Pr", "#e6522c"),
+            ("Grafana", "Gr", "#f46800"),
+            ("Nginx", "Nx", "#009639"),
             ("Docker", "Do", "#2496ed"),
             ("Kubernetes", "K8s", "#326ce5"),
             ("GitHub Actions", "GA", "#2088ff"),
@@ -1076,74 +1619,175 @@ def prediction_map(frame: pd.DataFrame, selected_location: str, threshold: float
     selected_lat = float(selected.iloc[0]["lat"]) if not selected.empty else -25.0
     selected_lon = float(selected.iloc[0]["lon"]) if not selected.empty else 133.0
 
-    if frame["probability"].notna().any():
+    has_probability = bool(frame["probability"].notna().any())
+    if has_probability:
         color = frame["probability"] * 100.0
         hover = [
             f"{row.location}<br>Rain probability: {row.probability * 100:.1f}%<br>Zone: {row.rainfall_zone}"
             for row in frame.itertuples()
         ]
-        colorbar_title = "Rain probability"
-        colorscale = [[0, "#278455"], [0.55, "#c99522"], [1, "#1f76d2"]]
+        marker_options = {
+            "color": color,
+            "colorscale": [[0, "#278455"], [0.55, "#c99522"], [1, "#1f76d2"]],
+            "cmin": 0,
+            "cmax": 100,
+            "showscale": True,
+            "colorbar": {"title": "Rain probability", "thickness": 10},
+        }
     else:
-        zones = {name: idx for idx, name in enumerate(sorted(frame["rainfall_zone"].astype(str).unique()))}
-        color = frame["rainfall_zone"].astype(str).map(zones)
         hover = [f"{row.location}<br>Zone: {row.rainfall_zone}" for row in frame.itertuples()]
-        colorbar_title = "Rainfall zone"
-        colorscale = "Viridis"
+        marker_options = {"color": "#1f76d2", "showscale": False}
+
+    tasmania = [
+        (145.397978, -40.792549), (146.364121, -41.137695), (146.908584, -41.000546),
+        (147.689259, -40.808258), (148.289068, -40.875438), (148.359865, -42.062445),
+        (148.017301, -42.407024), (147.914052, -43.211522), (147.564564, -42.937689),
+        (146.870343, -43.634597), (146.663327, -43.580854), (146.048378, -43.549745),
+        (145.43193, -42.693776), (145.29509, -42.03361), (144.718071, -41.162552),
+        (144.743755, -40.703975), (145.397978, -40.792549),
+    ]
+    mainland = [
+        (143.561811, -13.763656), (143.922099, -14.548311), (144.563714, -14.171176),
+        (144.894908, -14.594458), (145.374724, -14.984976), (145.271991, -15.428205),
+        (145.48526, -16.285672), (145.637033, -16.784918), (145.888904, -16.906926),
+        (146.160309, -17.761655), (146.063674, -18.280073), (146.387478, -18.958274),
+        (147.471082, -19.480723), (148.177602, -19.955939), (148.848414, -20.39121),
+        (148.717465, -20.633469), (149.28942, -21.260511), (149.678337, -22.342512),
+        (150.077382, -22.122784), (150.482939, -22.556142), (150.727265, -22.402405),
+        (150.899554, -23.462237), (151.609175, -24.076256), (152.07354, -24.457887),
+        (152.855197, -25.267501), (153.136162, -26.071173), (153.161949, -26.641319),
+        (153.092909, -27.2603), (153.569469, -28.110067), (153.512108, -28.995077),
+        (153.339095, -29.458202), (153.069241, -30.35024), (153.089602, -30.923642),
+        (152.891578, -31.640446), (152.450002, -32.550003), (151.709117, -33.041342),
+        (151.343972, -33.816023), (151.010555, -34.31036), (150.714139, -35.17346),
+        (150.32822, -35.671879), (150.075212, -36.420206), (149.946124, -37.109052),
+        (149.997284, -37.425261), (149.423882, -37.772681), (148.304622, -37.809061),
+        (147.381733, -38.219217), (146.922123, -38.606532), (146.317922, -39.035757),
+        (145.489652, -38.593768), (144.876976, -38.417448), (145.032212, -37.896188),
+        (144.485682, -38.085324), (143.609974, -38.809465), (142.745427, -38.538268),
+        (142.17833, -38.380034), (141.606582, -38.308514), (140.638579, -38.019333),
+        (139.992158, -37.402936), (139.806588, -36.643603), (139.574148, -36.138362),
+        (139.082808, -35.732754), (138.120748, -35.612296), (138.449462, -35.127261),
+        (138.207564, -34.384723), (137.71917, -35.076825), (136.829406, -35.260535),
+        (137.352371, -34.707339), (137.503886, -34.130268), (137.890116, -33.640479),
+        (137.810328, -32.900007), (136.996837, -33.752771), (136.372069, -34.094766),
+        (135.989043, -34.890118), (135.208213, -34.47867), (135.239218, -33.947953),
+        (134.613417, -33.222778), (134.085904, -32.848072), (134.273903, -32.617234),
+        (132.990777, -32.011224), (132.288081, -31.982647), (131.326331, -31.495803),
+        (129.535794, -31.590423), (128.240938, -31.948489), (127.102867, -32.282267),
+        (126.148714, -32.215966), (125.088623, -32.728751), (124.221648, -32.959487),
+        (124.028947, -33.483847), (123.659667, -33.890179), (122.811036, -33.914467),
+        (122.183064, -34.003402), (121.299191, -33.821036), (120.580268, -33.930177),
+        (119.893695, -33.976065), (119.298899, -34.509366), (119.007341, -34.464149),
+        (118.505718, -34.746819), (118.024972, -35.064733), (117.295507, -35.025459),
+        (116.625109, -35.025097), (115.564347, -34.386428), (115.026809, -34.196517),
+        (115.048616, -33.623425), (115.545123, -33.487258), (115.714674, -33.259572),
+        (115.679379, -32.900369), (115.801645, -32.205062), (115.689611, -31.612437),
+        (115.160909, -30.601594), (114.997043, -30.030725), (115.040038, -29.461095),
+        (114.641974, -28.810231), (114.616498, -28.516399), (114.173579, -28.118077),
+        (114.048884, -27.334765), (113.477498, -26.543134), (113.338953, -26.116545),
+        (113.778358, -26.549025), (113.440962, -25.621278), (113.936901, -25.911235),
+        (114.232852, -26.298446), (114.216161, -25.786281), (113.721255, -24.998939),
+        (113.625344, -24.683971), (113.393523, -24.384764), (113.502044, -23.80635),
+        (113.706993, -23.560215), (113.843418, -23.059987), (113.736552, -22.475475),
+        (114.149756, -21.755881), (114.225307, -22.517488), (114.647762, -21.82952),
+        (115.460167, -21.495173), (115.947373, -21.068688), (116.711615, -20.701682),
+        (117.166316, -20.623599), (117.441545, -20.746899), (118.229559, -20.374208),
+        (118.836085, -20.263311), (118.987807, -20.044203), (119.252494, -19.952942),
+        (119.805225, -19.976506), (120.85622, -19.683708), (121.399856, -19.239756),
+        (121.655138, -18.705318), (122.241665, -18.197649), (122.286624, -17.798603),
+        (122.312772, -17.254967), (123.012574, -16.4052), (123.433789, -17.268558),
+        (123.859345, -17.069035), (123.503242, -16.596506), (123.817073, -16.111316),
+        (124.258287, -16.327944), (124.379726, -15.56706), (124.926153, -15.0751),
+        (125.167275, -14.680396), (125.670087, -14.51007), (125.685796, -14.230656),
+        (126.125149, -14.347341), (126.142823, -14.095987), (126.582589, -13.952791),
+        (127.065867, -13.817968), (127.804633, -14.276906), (128.35969, -14.86917),
+        (128.985543, -14.875991), (129.621473, -14.969784), (129.4096, -14.42067),
+        (129.888641, -13.618703), (130.339466, -13.357376), (130.183506, -13.10752),
+        (130.617795, -12.536392), (131.223495, -12.183649), (131.735091, -12.302453),
+        (132.575298, -12.114041), (132.557212, -11.603012), (131.824698, -11.273782),
+        (132.357224, -11.128519), (133.019561, -11.376411), (133.550846, -11.786515),
+        (134.393068, -12.042365), (134.678632, -11.941183), (135.298491, -12.248606),
+        (135.882693, -11.962267), (136.258381, -12.049342), (136.492475, -11.857209),
+        (136.95162, -12.351959), (136.685125, -12.887223), (136.305407, -13.29123),
+        (135.961758, -13.324509), (136.077617, -13.724278), (135.783836, -14.223989),
+        (135.428664, -14.715432), (135.500184, -14.997741), (136.295175, -15.550265),
+        (137.06536, -15.870762), (137.580471, -16.215082), (138.303217, -16.807604),
+        (138.585164, -16.806622), (139.108543, -17.062679), (139.260575, -17.371601),
+        (140.215245, -17.710805), (140.875463, -17.369069), (141.07111, -16.832047),
+        (141.274095, -16.38887), (141.398222, -15.840532), (141.702183, -15.044921),
+        (141.56338, -14.561333), (141.63552, -14.270395), (141.519869, -13.698078),
+        (141.65092, -12.944688), (141.842691, -12.741548), (141.68699, -12.407614),
+        (141.928629, -11.877466), (142.118488, -11.328042), (142.143706, -11.042737),
+        (142.51526, -10.668186), (142.79731, -11.157355), (142.866763, -11.784707),
+        (143.115947, -11.90563), (143.158632, -12.325656), (143.522124, -12.834358),
+        (143.597158, -13.400422), (143.561811, -13.763656),
+    ]
 
     fig = go.Figure()
+    for ring in (mainland, tasmania):
+        lon, lat = zip(*ring)
+        fig.add_trace(
+            go.Scatter(
+                x=lon,
+                y=lat,
+                mode="lines",
+                fill="toself",
+                fillcolor="#eef6f1",
+                line={"color": "rgba(23,56,72,.32)", "width": 1.1},
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
     fig.add_trace(
-        go.Scattergeo(
-            lat=frame["lat"],
-            lon=frame["lon"],
+        go.Scatter(
+            x=frame["lon"],
+            y=frame["lat"],
             text=hover,
             hoverinfo="text",
             mode="markers",
             marker={
-                "size": frame["location"].eq(selected_location).map({True: 18, False: 9}),
-                "color": color,
-                "colorscale": colorscale,
-                "cmin": 0,
-                "cmax": 100 if frame["probability"].notna().any() else None,
-                "line": {"width": frame["location"].eq(selected_location).map({True: 2.8, False: 0.8}), "color": "#173848"},
-                "colorbar": {"title": colorbar_title, "thickness": 12},
-                "opacity": 0.9,
+                "size": frame["location"].eq(selected_location).map({True: 14, False: 7}),
+                **marker_options,
+                "line": {"width": frame["location"].eq(selected_location).map({True: 2.2, False: 0.7}), "color": "#173848"},
+                "opacity": 0.92,
             },
             name="Weather stations",
         )
     )
     fig.add_trace(
-        go.Scattergeo(
-            lat=[selected_lat],
-            lon=[selected_lon],
+        go.Scatter(
+            x=[selected_lon],
+            y=[selected_lat],
             text=[selected_location],
             mode="markers+text",
             textposition="top center",
-            marker={"size": 24, "symbol": "star", "color": "#c9473a", "line": {"color": "white", "width": 2}},
+            marker={"size": 22, "symbol": "star", "color": "#c9473a", "line": {"color": "white", "width": 2}},
             name="Selected station",
             hoverinfo="skip",
         )
     )
-    fig.update_geos(
-        projection_type="natural earth",
-        showland=True,
-        landcolor="#edf4ef",
-        showocean=True,
-        oceancolor="#dceef6",
-        showcountries=True,
-        countrycolor="rgba(23,56,72,.25)",
-        lonaxis_range=[110, 156],
-        lataxis_range=[-45, -9],
-    )
     fig.update_layout(
-        height=420,
-        margin={"l": 0, "r": 0, "t": 22, "b": 0},
+        height=500,
+        margin={"l": 0, "r": 0, "t": 4, "b": 0},
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="#dceef6",
         showlegend=False,
+        xaxis={"visible": False, "range": [112, 155], "fixedrange": True},
+        yaxis={"visible": False, "range": [-45, -9], "fixedrange": True, "scaleanchor": "x", "scaleratio": 1},
+        annotations=[
+            {
+                "x": 0.03,
+                "y": 0.96,
+                "xref": "paper",
+                "yref": "paper",
+                "text": "Australia station coverage",
+                "showarrow": False,
+                "font": {"size": 11, "color": "#5b6e76"},
+                "align": "left",
+            }
+        ],
     )
-    if error:
-        st.caption(error)
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
     html("<div class='caption'>Map shows all supported WeatherAUS station locations. The selected station is highlighted.</div>")
 
@@ -1163,7 +1807,7 @@ def prediction_result_panel(
             <div class="result-panel">
               <div class="eyebrow">Prediction date</div>
               <div class="answer">{escape(fmt_date(prediction_date))}</div>
-              <div class="copy">The live model runtime is needed to score the selected station.</div>
+              <div class="copy">Model scoring runtime unavailable.</div>
               <div class="mini-grid">
                 <div><span>Station</span>{escape(selected_location)}</div>
                 <div><span>Observed on</span>{escape(fmt_date(observation_date))}</div>
@@ -1227,6 +1871,60 @@ def probability_gauge(probability: float, threshold: float) -> None:
     html("<div class='caption'>Model probability against the saved 58% decision threshold (red line).</div>")
 
 
+def season_name(month: int) -> str:
+    if month in {12, 1, 2}:
+        return "Summer"
+    if month in {3, 4, 5}:
+        return "Autumn"
+    if month in {6, 7, 8}:
+        return "Winter"
+    return "Spring"
+
+
+def feature_snapshot_panel(
+    selected_location: str,
+    observation_date: date,
+    rain_today: str,
+    scenario: pd.DataFrame,
+) -> None:
+    selected = scenario.loc[scenario["location"] == selected_location] if not scenario.empty else pd.DataFrame()
+    zone = str(selected.iloc[0].get("rainfall_zone", "Unknown")) if not selected.empty else "Unknown"
+    items = [
+        ("Station", selected_location),
+        ("Season", season_name(observation_date.month)),
+        ("Rainfall zone", zone),
+        ("Rain today", rain_today),
+    ]
+    blocks = ["<div class='feature-snapshot'>"]
+    for label, value in items:
+        blocks.append(f"<div><span>{escape(label)}</span><b>{escape(value)}</b></div>")
+    blocks.append("</div>")
+    html("".join(blocks))
+
+
+def observation_snapshot_panel(sample: dict, rain_today: str) -> None:
+    def number(key: str, fallback: float) -> float:
+        try:
+            return float(sample.get(key, fallback))
+        except (TypeError, ValueError):
+            return fallback
+
+    items = [
+        ("Temperature", f"{number('min_temp', 10.1):.1f} to {number('max_temp', 20.1):.1f} °C"),
+        ("Rainfall", f"{number('rainfall', 0.0):.1f} mm"),
+        ("Humidity", f"{number('humidity_9am', 53.0):.0f}% / {number('humidity_3pm', 61.0):.0f}%"),
+        ("Pressure", f"{number('pressure_9am', 1023.4):.1f} / {number('pressure_3pm', 1022.0):.1f} hPa"),
+        ("Wind gust", f"{number('wind_gust_speed', 41.0):.0f} km/h"),
+        ("Cloud", f"{number('cloud_3pm', 6.0):.0f} oktas"),
+    ]
+    blocks = ["<div class='feature-snapshot'>"]
+    for label, value in items:
+        blocks.append(f"<div><span>{escape(label)}</span><b>{escape(value)}</b></div>")
+    blocks.append("</div>")
+    html("<div class='caption' style='margin-top:.65rem'>Saved observation used for this prediction example.</div>")
+    html("".join(blocks))
+
+
 def prediction_studio() -> None:
     sample = load_sample_input()
     locations = load_locations()
@@ -1239,14 +1937,20 @@ def prediction_studio() -> None:
     default_index = location_names.index(default_location) if default_location in location_names else 0
     default_date = sample_observation_date(sample)
 
+    def sample_float(key: str, fallback: float) -> float:
+        try:
+            return float(sample.get(key, fallback))
+        except (TypeError, ValueError):
+            return fallback
+
     compact_header(
         "Live prediction",
         "Exact next-day forecast example",
         "The scenario combines station context, weather observations, model probability, decision threshold, and geographic coverage in one view.",
         "#009688",
     )
-    controls, result_col, map_col = st.columns([0.32, 0.26, 0.42], gap="large")
-    with controls:
+    details_col, map_col = st.columns([0.42, 0.58], gap="large")
+    with details_col:
         head_a, head_b = st.columns(2)
         with head_a:
             selected_location = st.selectbox("Station", location_names, index=default_index)
@@ -1254,44 +1958,46 @@ def prediction_studio() -> None:
             observation_date = st.date_input("Observation date", value=default_date)
         if not isinstance(observation_date, date):
             observation_date = default_date
-        col_a, col_b = st.columns(2, gap="medium")
-        with col_a:
-            min_temp = st.slider("Min temp (°C)", -5.0, 35.0, float(sample.get("min_temp", 10.1)), 0.1)
-            rainfall = st.slider("Rainfall (mm)", 0.0, 80.0, float(sample.get("rainfall", 0.0)), 0.2)
-            pressure_3pm = st.slider("Pressure 3pm (hPa)", 950.0, 1045.0, float(sample.get("pressure_3pm", 1022.0)), 0.1)
-        with col_b:
-            max_temp = st.slider("Max temp (°C)", -2.0, 48.0, float(sample.get("max_temp", 20.1)), 0.1)
-            humidity_3pm = st.slider("Humidity 3pm (%)", 0.0, 100.0, float(sample.get("humidity_3pm", 61.0)), 1.0)
-            wind_gust_speed = st.slider("Wind gust (km/h)", 0.0, 115.0, float(sample.get("wind_gust_speed", 41.0)), 1.0)
-        rain_today = st.radio("Rain today", ["No", "Yes"], horizontal=True, index=int(float(sample.get("rain_today", 0)) > 0))
-        with st.expander("Morning & cloud observations"):
-            humidity_9am = st.slider("Humidity at 9am (%)", 0.0, 100.0, float(sample.get("humidity_9am", 53.0)), 1.0)
-            pressure_9am = st.slider("Pressure at 9am (hPa)", 950.0, 1045.0, float(sample.get("pressure_9am", pressure_3pm + 1.4)), 0.1)
-            cloud_3pm = st.slider("Cloud at 3pm (oktas)", 0.0, 9.0, float(sample.get("cloud_3pm", 6.0)), 1.0)
-    scenario, selected_payload, threshold, error = build_prediction_scenario(
-        selected_location,
-        observation_date,
-        min_temp,
-        max_temp,
-        rainfall,
-        humidity_9am,
-        humidity_3pm,
-        pressure_9am,
-        pressure_3pm,
-        wind_gust_speed,
-        cloud_3pm,
-        rain_today,
-    )
-
-    with result_col:
+        min_temp = sample_float("min_temp", 10.1)
+        max_temp = sample_float("max_temp", 20.1)
+        rainfall = sample_float("rainfall", 0.0)
+        humidity_9am = sample_float("humidity_9am", 53.0)
+        humidity_3pm = sample_float("humidity_3pm", 61.0)
+        pressure_3pm = sample_float("pressure_3pm", 1022.0)
+        pressure_9am = sample_float("pressure_9am", pressure_3pm + 1.4)
+        wind_gust_speed = sample_float("wind_gust_speed", 41.0)
+        cloud_3pm = sample_float("cloud_3pm", 6.0)
+        rain_today = "Yes" if sample_float("rain_today", 0.0) > 0 else "No"
+        scenario, _selected_payload, threshold, error = build_prediction_scenario(
+            selected_location,
+            observation_date,
+            min_temp,
+            max_temp,
+            rainfall,
+            humidity_9am,
+            humidity_3pm,
+            pressure_9am,
+            pressure_3pm,
+            wind_gust_speed,
+            cloud_3pm,
+            rain_today,
+        )
         prediction_result_panel(selected_location, observation_date, threshold, scenario, error)
         selected = scenario.loc[scenario["location"] == selected_location] if not scenario.empty else pd.DataFrame()
         if not selected.empty and pd.notna(selected.iloc[0].get("probability")):
             probability_gauge(float(selected.iloc[0]["probability"]), threshold)
-        if selected_payload:
-            with st.expander("Model payload (68-feature contract)"):
-                st.json(selected_payload, expanded=False)
+        feature_snapshot_panel(selected_location, observation_date, rain_today, scenario)
+        observation_snapshot_panel(sample, rain_today)
+
     with map_col:
+        html(
+            f"""
+            <div class="map-heading">
+              <b>Live station map</b>
+              <span>Selected station: {escape(selected_location)} · forecast for {escape(fmt_date(observation_date + timedelta(days=1)))}</span>
+            </div>
+            """
+        )
         prediction_map(scenario, selected_location, threshold, error)
         if not scenario.empty and scenario["probability"].notna().any():
             ranked = scenario.sort_values("probability", ascending=False).head(5)
@@ -1322,11 +2028,344 @@ def stage_cards(items: list[tuple[str, str, str, str]]) -> None:
     html("".join(blocks))
 
 
+def flow_rail(items: list[dict], active_key: str) -> None:
+    blocks = ["<div class='flow-rail'>"]
+    for item in items:
+        active = " active" if item["key"] == active_key else ""
+        blocks.append(
+            f"<div class='flow-step{active}' style='--c:{escape(item['color'])}'>"
+            f"<small>{escape(item['step'])}</small>"
+            f"<b>{escape(item['short'])}</b>"
+            "</div>"
+        )
+    blocks.append("</div>")
+    html("".join(blocks))
+
+
+def interactive_detail(item: dict) -> None:
+    evidence = "".join(
+        f"<div style='--c:{escape(item['color'])}'>{escape(value)}</div>"
+        for value in item["evidence"]
+    )
+    artifacts = "".join(f"<span>{escape(value)}</span>" for value in item["artifacts"])
+    html(
+        f"""
+        <div class="interactive-panel">
+          <div class="detail-grid">
+            <div>
+              <div class="kicker" style="color:{escape(item['color'])}">{escape(item['kicker'])}</div>
+              <h3>{escape(item['title'])}</h3>
+              <p>{escape(item['body'])}</p>
+              <div class="evidence-list">{evidence}</div>
+            </div>
+            <div>
+              <div class="kicker" style="color:{escape(item['color'])}">Repository evidence</div>
+              <div class="artifact-pill-row">{artifacts}</div>
+            </div>
+          </div>
+        </div>
+        """
+    )
+
+
+def monitor_meter(items: list[dict], active_key: str) -> None:
+    blocks = ["<div class='monitor-meter'>"]
+    for item in items:
+        active = " active" if item["key"] == active_key else ""
+        blocks.append(
+            f"<div class='{active}' style='--c:{escape(item['color'])}'>"
+            f"<small>{escape(item['schedule'])}</small>"
+            f"<b>{escape(item['name'])}</b>"
+            f"<span>{escape(item['purpose'])}</span>"
+            "</div>"
+        )
+    blocks.append("</div>")
+    html("".join(blocks))
+
+
+def pipeline_figure(items: list[dict], active_key: str) -> None:
+    logos = {
+        "data": ("Pandas", "#150458", "pd"),
+        "features": ("Python", "#3776ab", "Py"),
+        "model": ("CatBoost", "#c99700", "CB"),
+        "lineage": ("DVC", "#945dd6", "DVC"),
+        "automation": ("Airflow", "#017cee", "AF"),
+        "runtime": ("Kubernetes", "#326ce5", "K8s"),
+    }
+    descriptions = {
+        "data": "Raw rows and station context",
+        "features": "Saved feature order",
+        "model": "Model + metadata package",
+        "lineage": "DVC pointers and run state",
+        "automation": "Scheduled workflows",
+        "runtime": "Pods, services, PVCs",
+    }
+    blocks = ["<div class='pipeline-figure'><div class='pipeline-rail'>"]
+    for idx, item in enumerate(items):
+        logo_name, logo_color, mark = logos[item["key"]]
+        active = " active" if item["key"] == active_key else ""
+        blocks.append(
+            f"<div class='pipeline-node{active}' style='--c:{escape(item['color'])}'>"
+            f"<div class='node-head'>{logo_badge(logo_name, logo_color, mark)}"
+            f"<div><small>{escape(item['step'])}</small><b>{escape(item['short'])}</b></div></div>"
+            f"<span>{escape(descriptions[item['key']])}</span>"
+            "</div>"
+        )
+        if idx < len(items) - 1:
+            blocks.append("<div class='pipe-arrow'>→</div>")
+    blocks.append("</div></div>")
+    html("".join(blocks))
+
+
+def structure_flow_figure(active_key: str) -> None:
+    node_labels = [
+        "Weather data",
+        "Raw DVC data",
+        "Feature contract",
+        "CatBoost training",
+        "MLflow tracking",
+        "DVC remote",
+        "Airflow DAGs",
+        "FastAPI service",
+        "Kubernetes runtime",
+        "Evidently drift",
+    ]
+    key_to_nodes = {
+        "data": {0, 1},
+        "features": {2},
+        "model": {3, 4},
+        "lineage": {1, 5},
+        "automation": {6},
+        "runtime": {7, 8},
+    }
+    active_nodes = key_to_nodes.get(active_key, set())
+    node_colors = ["rgba(31,118,210,.18)"] * len(node_labels)
+    accent = {
+        "data": "rgba(31,118,210,.85)",
+        "features": "rgba(39,132,85,.85)",
+        "model": "rgba(201,149,34,.9)",
+        "lineage": "rgba(148,93,214,.85)",
+        "automation": "rgba(1,124,238,.86)",
+        "runtime": "rgba(50,108,229,.88)",
+    }.get(active_key, "rgba(23,56,72,.8)")
+    for idx in active_nodes:
+        node_colors[idx] = accent
+
+    sources = [0, 1, 2, 3, 3, 3, 6, 7, 8, 9]
+    targets = [1, 2, 3, 4, 5, 7, 3, 8, 9, 6]
+    values = [6, 6, 5, 3, 3, 4, 4, 4, 2, 2]
+    link_colors = ["rgba(23,56,72,.17)"] * len(sources)
+    for i, (source, target) in enumerate(zip(sources, targets)):
+        if source in active_nodes or target in active_nodes:
+            link_colors[i] = accent.replace(".85", ".32").replace(".86", ".32").replace(".88", ".32").replace(".9", ".32")
+
+    fig = go.Figure(
+        data=[
+            go.Sankey(
+                arrangement="snap",
+                node={
+                    "pad": 18,
+                    "thickness": 18,
+                    "line": {"color": "rgba(23,56,72,.18)", "width": 1},
+                    "label": node_labels,
+                    "color": node_colors,
+                },
+                link={
+                    "source": sources,
+                    "target": targets,
+                    "value": values,
+                    "color": link_colors,
+                },
+            )
+        ]
+    )
+    fig.update_layout(
+        height=330,
+        margin={"l": 8, "r": 8, "t": 8, "b": 8},
+        paper_bgcolor="rgba(0,0,0,0)",
+        font={"family": "Segoe UI, sans-serif", "size": 12, "color": "#173848"},
+    )
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
+
+def structure_blueprint_figure(active_key: str) -> None:
+    lanes = [
+        {
+            "title": "Data foundation",
+            "tool": ("Pandas", "#150458", "pd"),
+            "color": "#1f76d2",
+            "items": [
+                ("data", "Weather rows", "Date + Location upsert", "Pandas", "#150458", "pd"),
+                ("features", "Feature contract", f"{FEATURE_COUNT} ordered features", "Python", "#3776ab", "Py"),
+            ],
+        },
+        {
+            "title": "Training package",
+            "tool": ("CatBoost", "#c99700", "CB"),
+            "color": "#c99522",
+            "items": [
+                ("model", "Winner model", "CatBoost artifact + metadata", "CatBoost", "#c99700", "CB"),
+                ("lineage", "Artifact lineage", "DVC pointers + DagsHub remote", "DVC", "#945dd6", "DVC"),
+                ("model", "Experiment record", "metrics and model package in MLflow", "MLflow", "#0194e2", "ML"),
+            ],
+        },
+        {
+            "title": "Production loop",
+            "tool": ("Kubernetes", "#326ce5", "K8s"),
+            "color": "#326ce5",
+            "items": [
+                ("automation", "Airflow schedules", "ingest, train, version, drift", "Airflow", "#017cee", "AF"),
+                ("runtime", "Serving runtime", "FastAPI on Kubernetes", "FastAPI", "#009688", "FA"),
+                ("automation", "Monitoring feedback", "Evidently metrics to Pushgateway", "Evidently", "#e31b23", "EV"),
+            ],
+        },
+    ]
+    blocks = ["<div class='blueprint-figure'><div class='blueprint-grid'>"]
+    for lane in lanes:
+        tool_name, tool_color, tool_mark = lane["tool"]
+        blocks.append(
+            f"<div class='blueprint-lane' style='--c:{escape(lane['color'])}'>"
+            f"<h3>{logo_badge(tool_name, tool_color, tool_mark)}{escape(lane['title'])}</h3>"
+            "<div class='blueprint-items'>"
+        )
+        for key, title, body, logo_name, color, mark in lane["items"]:
+            active = " active" if key == active_key else ""
+            blocks.append(
+                f"<div class='blueprint-pill{active}' style='--c:{escape(color)}'>"
+                f"{logo_badge(logo_name, color, mark)}"
+                f"<div><b>{escape(title)}</b><span>{escape(body)}</span></div>"
+                "</div>"
+            )
+        blocks.append("</div></div>")
+    blocks.append("</div></div>")
+    html("".join(blocks))
+
+
+def monitoring_loop_figure(items: list[dict], active_key: str) -> None:
+    positions = {
+        "ingestion": "loop-ingestion",
+        "versioning": "loop-versioning",
+        "e2e": "loop-e2e",
+        "drift": "loop-drift",
+    }
+    blocks = ["<div class='loop-figure'>"]
+    blocks.append(
+        "<div class='loop-core'><b>Model package</b>"
+        "<span>raw data, DVC state, MLflow run, reference dataset, API validation</span></div>"
+    )
+    blocks.extend(
+        [
+            "<div class='loop-arrow a1'>→</div>",
+            "<div class='loop-arrow a2'>↓</div>",
+            "<div class='loop-arrow a3'>←</div>",
+            "<div class='loop-arrow a4'>↑</div>",
+        ]
+    )
+    for item in items:
+        active = " active" if item["key"] == active_key else ""
+        blocks.append(
+            f"<div class='loop-node {positions[item['key']]}{active}' style='--c:{escape(item['color'])}'>"
+            f"<small>{escape(item['schedule'])} · {escape(item['kicker'])}</small>"
+            f"<b>{escape(item['label'])}</b>"
+            f"<span>{escape(item['purpose'])}</span>"
+            "</div>"
+        )
+    blocks.append("</div>")
+    html("".join(blocks))
+
+
+def monitoring_timeline_figure(items: list[dict], active_key: str) -> None:
+    x = [int(item["schedule"].split(":")[0]) for item in items]
+    y = [1 for _ in items]
+    names = [item["label"] for item in items]
+    colors = [item["color"] for item in items]
+    sizes = [24 if item["key"] == active_key else 16 for item in items]
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=x,
+            y=y,
+            mode="lines",
+            line={"color": "rgba(23,56,72,.22)", "width": 5},
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=x,
+            y=y,
+            mode="markers+text",
+            marker={"size": sizes, "color": colors, "line": {"color": "white", "width": 2}},
+            text=[f"{item['schedule']}<br>{item['label']}" for item in items],
+            textposition="top center",
+            customdata=[item["purpose"] for item in items],
+            hovertemplate="%{text}<br>%{customdata}<extra></extra>",
+            showlegend=False,
+        )
+    )
+    fig.update_xaxes(
+        range=[2.4, 7.6],
+        tickvals=[3, 4, 5, 6, 7],
+        ticktext=["03:00", "04:00", "05:00", "06:00", "07:00"],
+        showgrid=False,
+        zeroline=False,
+        title=None,
+    )
+    fig.update_yaxes(visible=False, range=[0.75, 1.35])
+    fig.update_layout(
+        height=210,
+        margin={"l": 18, "r": 18, "t": 46, "b": 18},
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font={"family": "Segoe UI, sans-serif", "size": 12, "color": "#173848"},
+    )
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
+
+def ci_pipeline_figure() -> None:
+    steps = [
+        ("01", "Checkout", "Repository state and Python runtime are prepared.", "GitHub Actions", "#2088ff", "GA"),
+        ("02", "Compile", "DAGs and production modules must import cleanly.", "Python", "#3776ab", "Py"),
+        ("03", "Test contracts", "Airflow, dependency, API, MLflow, and drift checks run.", "Airflow", "#017cee", "AF"),
+        ("04", "Build images", "FastAPI and Airflow image build paths are validated.", "Docker", "#2496ed", "Do"),
+        ("05", "Merge signal", "The branch is ready only when the operating contracts pass.", "Kubernetes", "#326ce5", "K8s"),
+    ]
+    blocks = ["<div class='ci-figure'><div class='ci-track'>"]
+    for step, title, body, logo_name, color, mark in steps:
+        blocks.append(
+            f"<div class='ci-step' style='--c:{escape(color)}'>"
+            f"<div class='node-head'>{logo_badge(logo_name, color, mark)}"
+            f"<div><small>{escape(step)}</small><b>{escape(title)}</b></div></div>"
+            f"<span>{escape(body)}</span>"
+            "</div>"
+        )
+    gates = [
+        "DAG import",
+        "Dependency pins",
+        "Prediction contract",
+        "Drift report",
+        "MLflow logging",
+        "Docker build",
+    ]
+    blocks.append("</div><div class='ci-gates'>")
+    for gate in gates:
+        blocks.append(f"<span>{escape(gate)}</span>")
+    blocks.append("</div></div>")
+    html("".join(blocks))
+
+
 def data_science_page() -> None:
     hero()
     prediction_studio()
 
     st.divider()
+    compact_header(
+        "Data science foundation",
+        "What the model learned before production",
+        "The data science part stays focused on the rain-tomorrow problem, the saved feature contract, and a time-aware evaluation.",
+        "#278455",
+    )
     metric_cards(
         [
             ("Winner model", "CatBoost", "hybrid tabular weather classifier"),
@@ -1335,50 +2374,14 @@ def data_science_page() -> None:
             ("F1 score", fmt_pct(METRICS.get("f1")), f"at the saved {THRESHOLD * 100:.0f}% threshold"),
         ]
     )
-    with st.expander("Full evaluation scorecard"):
-        metric_cards(
-            [
-                ("Precision", fmt_pct(METRICS.get("precision")), "of predicted rain days, how many rained"),
-                ("Recall", fmt_pct(METRICS.get("recall")), "of real rain days, how many were caught"),
-                ("Training rows", fmt_int(METRICS.get("train_rows")), "older observations learn the model"),
-                ("Test rows", fmt_int(METRICS.get("test_rows")), f"newest window: {TEST_PERIOD[0] or 'n/a'} to {TEST_PERIOD[1] or 'n/a'}"),
-            ]
-        )
-
-    if FEATURES:
-        with st.expander(f"Explore the {FEATURE_COUNT}-feature contract by group"):
-            grouped = group_features(list(FEATURES))
-            counts = grouped["Group"].value_counts()
-            summary_cols = st.columns(min(4, len(counts)), gap="small")
-            for idx, (group, count) in enumerate(counts.items()):
-                with summary_cols[idx % len(summary_cols)]:
-                    st.metric(group, int(count))
-            st.dataframe(grouped, width="stretch", height=280, hide_index=True)
-
-    st.divider()
-    left, right = st.columns([0.42, 0.58], gap="large")
-    with left:
-        story_card(
-            "Data science foundation",
-            [
-                "WeatherAUS station observations become a binary rain-tomorrow classification problem.",
-                "Feature engineering adds location, season, missingness memory, lag signals, wind vectors, and moisture features.",
-                "The split is chronological, so the final test window behaves more like future data.",
-                "The model package keeps the feature order, fill values, threshold, metadata, and sample input together.",
-            ],
-        )
-    with right:
-        image_with_caption(CHRONOLOGICAL_SPLIT_PATH, "Time-aware split used before the production workflow.")
-        image_with_caption(THRESHOLD_CURVE_PATH, "The saved threshold is part of the deployed model contract.")
-
-    st.divider()
-    fig1, fig2, fig3 = st.columns(3, gap="medium")
-    with fig1:
-        image_with_caption(CLASS_IMBALANCE_PATH, "Rain/no-rain imbalance explains why recall matters.")
-    with fig2:
-        image_with_caption(SEASONAL_PATTERNS_PATH, "Seasonality is visible before modeling.")
-    with fig3:
-        image_with_caption(KOPPEN_HEATMAP_PATH, "Climate-zone evidence keeps geography in the story.")
+    stage_cards(
+        [
+            ("Question", "Tomorrow rain", "WeatherAUS observations are framed as a binary next-day rain prediction problem.", "#1f76d2"),
+            ("Preparation", "Stable contract", "Cleaning and feature engineering produce the same ordered inputs for training and serving.", "#278455"),
+            ("Validation", "Time-aware test", "The newest observations are held out so the score reflects a future-facing forecast setting.", "#c99522"),
+            ("Handoff", "Model package", "The model, threshold, metadata, fill values, and sample input are stored together for MLOps.", "#945dd6"),
+        ]
+    )
 
 
 def endpoint_table() -> None:
@@ -1421,41 +2424,6 @@ def architecture_page() -> None:
     else:
         st.warning("Architecture image is missing.")
 
-    flow_tab, api_tab, k8s_tab = st.tabs(["Data flow", "Serving API", "Kubernetes runtime"])
-
-    with flow_tab:
-        stage_cards(
-            [
-                ("01", "Ingest", "New rows upserted by Date + Location — rerun-safe.", "#1f76d2"),
-                ("02", "Train", "68-feature pipeline feeds the hybrid CatBoost winner.", "#278455"),
-                ("03", "Package", "Model, metadata, sample input, and drift reference written together.", "#c99522"),
-                ("04", "Version", "Artifacts to DVC/DagsHub, run metrics to MLflow.", "#945dd6"),
-                ("05", "Serve", "FastAPI validated against the saved contract.", "#009688"),
-                ("06", "Watch", "Evidently drift report pushes metrics to Pushgateway.", "#e31b23"),
-            ]
-        )
-
-    with api_tab:
-        endpoint_table()
-        html(
-            f"<div class='caption'>All endpoints read one contract: {FEATURE_COUNT} features in saved order, "
-            f"categorical list, numeric fill values, and the {THRESHOLD * 100:.0f}% decision threshold.</div>"
-        )
-
-    with k8s_tab:
-        metric_cards(
-            [
-                ("API replicas", "3–4", "HPA + PDB"),
-                ("Airflow web", "3", "webserver replicas"),
-                ("Scheduler", "1", "single — avoids duplicate-DAG races"),
-                ("Workers", "2–3", "Celery, HPA-scaled"),
-            ]
-        )
-        html(
-            "<div class='caption'>Plus Postgres and Redis StatefulSets, four PVCs, the model-fetcher init container "
-            "(dvc pull), and the Pushgateway service — exactly the resources in kubernetes/kustomization.yaml.</div>"
-        )
-
 
 def structure_page() -> None:
     section_header(
@@ -1464,30 +2432,109 @@ def structure_page() -> None:
         "The project is organized as data flow, artifact flow, automation flow, monitoring flow, and runtime flow.",
         "#278455",
     )
-    rows = [
-        ("01", "Data preparation", "Extract, normalize, validate, and upsert incoming weather rows into the raw WeatherAUS-style dataset.", "#1f76d2"),
-        ("02", "Feature contract", "Build the 68-feature CatBoost contract with location, missingness, lag, wind, pressure, humidity, and climate context.", "#278455"),
-        ("03", "Model artifact", "Write winner_model.joblib, metadata.json, sample_input.json, and reference_dataset.csv as one operating package.", "#c99522"),
-        ("04", "DVC lineage", "Track raw data, model, prepared tables, and monitoring reference files through DVC pointers and status records.", "#945dd6"),
-        ("05", "Airflow automation", "Schedule ingestion, versioning, end-to-end retraining, MLflow handoff, API validation, and drift monitoring.", "#017cee"),
-        ("06", "Kubernetes runtime", "Run Airflow, FastAPI, Postgres, Redis, Pushgateway, PVCs, HPAs, PDBs, and services from kustomization.", "#326ce5"),
-    ]
-    stage_cards(rows)
-    st.divider()
-    c1, c2 = st.columns([0.48, 0.52], gap="large")
-    with c1:
-        image_with_caption(MODEL_COMPARISON_PATH, "Model comparison evidence from the data science base.")
-    with c2:
-        story_card(
-            "Operational evidence",
-            [
-                "Airflow contains scheduled workflows for ingestion, versioning, training, validation, and drift monitoring.",
-                "New data enters the same training/test path through the raw dataset.",
-                "DVC and MLflow give traceability for artifacts and model metadata.",
-                "Evidently and Pushgateway connect batch monitoring to the runtime.",
-                "Kubernetes is the deployment target; local integration is only a same-machine support context.",
+    steps = [
+        {
+            "key": "data",
+            "step": "01",
+            "short": "Data prep",
+            "label": "01 Data prep",
+            "kicker": "Data flow",
+            "title": "Incoming rows become a reproducible training source",
+            "body": "Weather observations are normalized into the same WeatherAUS-style shape used by the original data science project, then upserted by Date and Location so reruns stay clean.",
+            "evidence": [
+                "Raw weather data is DVC-tracked, not treated as an invisible notebook input.",
+                "New extracted rows enter the same chronological split path as the historical rows.",
+                "Freshness and input snapshots are written into reports/versioning during Airflow runs.",
             ],
-        )
+            "artifacts": ["data/raw/weatherAUS.csv.dvc", "src/data/", "reports/versioning/"],
+            "color": "#1f76d2",
+        },
+        {
+            "key": "features",
+            "step": "02",
+            "short": "Feature contract",
+            "label": "02 Features",
+            "kicker": "Model contract",
+            "title": "The API and retraining code share one 68-feature contract",
+            "body": "The winner model expects ordered numeric and categorical inputs with saved fill values, location context, wind features, humidity, pressure, lag features, and climate/rainfall bins.",
+            "evidence": [
+                "Metadata stores the feature list, categorical features, threshold, and evaluation window.",
+                "The prediction payload is assembled from the same contract used by the served API.",
+                "The presentation prediction example reads the saved sample input instead of inventing fields.",
+            ],
+            "artifacts": ["models/final_winner/metadata.json", "model_config.json", "sample_input.json"],
+            "color": "#278455",
+        },
+        {
+            "key": "model",
+            "step": "03",
+            "short": "Model package",
+            "label": "03 Model",
+            "kicker": "Training output",
+            "title": "Training writes an operating package, not just a score",
+            "body": "Every training cycle rewrites the CatBoost model, metadata, sample payload, and monitoring reference so downstream services use one synchronized package.",
+            "evidence": [
+                "Winner model artifacts are saved together under models/final_winner.",
+                "The reference dataset used by Evidently is regenerated by training.",
+                "Evaluation metrics are logged with the same threshold that the API uses.",
+            ],
+            "artifacts": ["winner_model.joblib.dvc", "metadata.json", "data/monitoring/reference_dataset.csv.dvc"],
+            "color": "#c99522",
+        },
+        {
+            "key": "lineage",
+            "step": "04",
+            "short": "Lineage",
+            "label": "04 Lineage",
+            "kicker": "Versioning",
+            "title": "DVC records artifact identity while Airflow records run context",
+            "body": "The workflow captures which raw data pointer, model pointer, metadata, and sample payload were present around each scheduled run.",
+            "evidence": [
+                "DVC pointers keep large data/model artifacts pullable without bloating Git.",
+                "Airflow writes input, output, DVC status, and freshness manifests.",
+                "Remote publishing remains controlled instead of being a hidden automated side effect.",
+            ],
+            "artifacts": ["*.dvc", "src/versioning/", "reports/versioning/*.json"],
+            "color": "#945dd6",
+        },
+        {
+            "key": "automation",
+            "step": "05",
+            "short": "Automation",
+            "label": "05 Airflow",
+            "kicker": "Orchestration",
+            "title": "Airflow connects ingestion, training, tracking, validation, and drift",
+            "body": "The project runs as scheduled DAGs with explicit failure points instead of manual notebook execution.",
+            "evidence": [
+                "Four DAGs are configured for local and Kubernetes Airflow checks.",
+                "The end-to-end DAG retrains, logs to MLflow, validates API behavior, and records status.",
+                "The drift DAG checks the latest current window against the training reference.",
+            ],
+            "artifacts": ["airflow/dags/", "docker/airflow/", "tests/test_airflow_automation.py"],
+            "color": "#017cee",
+        },
+        {
+            "key": "runtime",
+            "step": "06",
+            "short": "Runtime",
+            "label": "06 Runtime",
+            "kicker": "Deployment",
+            "title": "Kubernetes describes the production-style runtime boundary",
+            "body": "The manifests separate API serving, Airflow web/scheduler/workers, Redis, Postgres, Pushgateway, PVCs, HPAs, PDBs, and services.",
+            "evidence": [
+                "Kustomization is the deployment entry point for the validated runtime bundle.",
+                "Persistent volumes keep Airflow logs, project workspace, Redis, and Postgres state.",
+                "HPAs and PDBs make the API and Airflow workers closer to production operation.",
+            ],
+            "artifacts": ["kubernetes/kustomization.yaml", "kubernetes/*deployment.yaml", "kubernetes/*pvc*.yaml"],
+            "color": "#326ce5",
+        },
+    ]
+    labels = [item["label"] for item in steps]
+    selected_label = st.radio("Production layer", labels, horizontal=True, label_visibility="collapsed")
+    active = next(item for item in steps if item["label"] == selected_label)
+    structure_blueprint_figure(active["key"])
+    interactive_detail(active)
 
 
 def ci_page() -> None:
@@ -1497,23 +2544,7 @@ def ci_page() -> None:
         "The pipeline checks the contracts that keep the production workflow from silently drifting.",
         "#2088ff",
     )
-    metric_cards(
-        [
-            ("Orchestration", "DAG compile", "Airflow files must load before merge"),
-            ("Dependencies", "Pinned", "Evidently, Plotly, MLflow, and Airflow stay compatible"),
-            ("Contracts", "API + drift", "Prediction and monitoring expectations are tested"),
-            ("Images", "Build check", "FastAPI and Airflow images remain reproducible"),
-        ]
-    )
-    stage_cards(
-        [
-            ("Step 1", "Repository context", "Checkout, Python setup, and dependency resolution for the workflow checks.", "#1f76d2"),
-            ("Step 2", "Module compile", "DAGs, extraction, versioning, monitoring, and API contract files must import cleanly.", "#017cee"),
-            ("Step 3", "Focused tests", "Airflow automation, dependency, MLflow, drift, and prediction API checks protect core contracts.", "#278455"),
-            ("Step 4", "Image validation", "Local integration config and FastAPI/Airflow image builds are validated.", "#326ce5"),
-            ("Step 5", "Merge readiness", "The branch is evaluated through reproducible checks before integration.", "#6557b6"),
-        ]
-    )
+    ci_pipeline_figure()
 
 
 def monitoring_page() -> None:
@@ -1523,60 +2554,94 @@ def monitoring_page() -> None:
         "Four scheduled Airflow DAGs ingest new observations, retrain the winner, version every artifact, and compare live data against the training reference.",
         "#e31b23",
     )
-    metric_cards(
-        [
-            ("Retraining cadence", "Daily", "the target is next-day rain, so daily is the right granularity"),
-            ("E2E pipeline", "06:00", "extract, version, train, log, validate"),
-            ("Versioning DAG", "04:00", "data/model DVC snapshots and manifests"),
-            ("Drift check", "07:00", "Evidently report + Pushgateway metrics"),
-        ]
-    )
-    stage_cards(
-        [
-            ("DAG 1", "daily_weather_ingestion", "New WeatherAUS-style rows are normalized and upserted into the raw dataset by Date + Location, so reruns never duplicate observations.", "#1f76d2"),
-            ("DAG 2", "end_to_end_mlops_pipeline", "Extracts data, versions the raw pointer, retrains CatBoost, rewrites the artifact package, logs to MLflow, and validates the serving contract.", "#278455"),
-            ("DAG 3", "data_model_versioning", "Writes input/output manifests around training so every run leaves a DVC-aware audit trail in reports/versioning.", "#945dd6"),
-            ("DAG 4", "drift_monitoring", "Compares a rolling window of live features against the training reference dataset and pushes summary metrics to Pushgateway.", "#e31b23"),
-        ]
-    )
-    st.divider()
-    c1, c2 = st.columns([0.5, 0.5], gap="large")
-    with c1:
-        story_card(
-            "Why a full-season drift window",
-            [
-                "The reference dataset is rewritten by every training run, so drift always compares against what the served model actually saw.",
-                "Short windows compare one season against a year-round reference and falsely report total drift.",
-                "The monitoring window covers a full seasonal cycle to separate seasonality from real distribution shift.",
-                "Reports land as timestamped HTML + JSON summaries, and the HTML report is also logged to MLflow.",
+    dags = [
+        {
+            "key": "ingestion",
+            "name": "daily_weather_ingestion",
+            "label": "Ingestion",
+            "schedule": "03:00",
+            "purpose": "Extract + upsert",
+            "kicker": "DAG 1",
+            "title": "New observations enter the same raw data contract",
+            "body": "Incoming WeatherAUS-style rows are normalized and upserted into the raw dataset by Date and Location. This keeps the data source rerun-safe and ready for the next training split.",
+            "evidence": [
+                "Airflow exposes scheduled run status for the ingestion workflow.",
+                "Extraction manifests record what entered the workflow.",
+                "No duplicate rows are created when a run is repeated.",
             ],
-        )
-    with c2:
-        story_card(
-            "Deliberately local-first automation",
-            [
-                "DAGs update local artifacts, DVC pointers, and manifests inside the runtime.",
-                "Remote DVC/Git publishing stays a review-time decision, never an automated side effect.",
-                "That keeps automated runs reproducible while the committed repo state stays pullable on any machine.",
-                "Kubernetes Airflow uses PVC-backed workspaces so runtime state survives pod replacement.",
+            "artifacts": ["daily_weather_ingestion_dag.py", "data/raw/weatherAUS.csv.dvc", "reports/versioning/*extraction*.json"],
+            "color": "#1f76d2",
+        },
+        {
+            "key": "e2e",
+            "name": "end_to_end_mlops_pipeline",
+            "label": "E2E retraining",
+            "schedule": "06:00",
+            "purpose": "Train + validate",
+            "kicker": "DAG 2",
+            "title": "The production training loop rebuilds and validates the package",
+            "body": "The end-to-end DAG extracts data, versions the raw pointer, retrains the CatBoost winner, rewrites model artifacts, logs to MLflow, validates the API contract, and records run status.",
+            "evidence": [
+                "The E2E DAG is scheduled and can also be triggered for a live retraining check.",
+                "Training uses chronological splitting so new rows naturally affect the newest evaluation window.",
+                "The saved threshold, feature contract, sample input, and model metadata move together.",
             ],
-        )
+            "artifacts": ["end_to_end_mlops_dag.py", "src/models/train_winner.py", "models/final_winner/"],
+            "color": "#278455",
+        },
+        {
+            "key": "versioning",
+            "name": "data_model_versioning",
+            "label": "Versioning",
+            "schedule": "04:00",
+            "purpose": "DVC + MLflow",
+            "kicker": "DAG 3",
+            "title": "Every run leaves an artifact audit trail",
+            "body": "The versioning DAG captures input state, output state, DVC status, MLflow handoff information, and model metadata so the run can be inspected after Airflow finishes.",
+            "evidence": [
+                "DVC pointers identify the raw data and model artifact versions.",
+                "MLflow receives parameters, metrics, tags, and model artifacts.",
+                "Reports in reports/versioning make the run explainable outside the Airflow UI.",
+            ],
+            "artifacts": ["data_model_versioning_dag.py", "src/versioning/", "mlruns / MLflow UI"],
+            "color": "#945dd6",
+        },
+        {
+            "key": "drift",
+            "name": "drift_monitoring",
+            "label": "Drift",
+            "schedule": "07:00",
+            "purpose": "Evidently + metrics",
+            "kicker": "DAG 4",
+            "title": "Drift compares current features against the model reference",
+            "body": "The drift DAG verifies the reference dataset, runs Evidently over a full seasonal window, logs the HTML report to MLflow, and pushes summary values to Pushgateway for Grafana.",
+            "evidence": [
+                "Evidently reports record dataset drift status and drifted column counts.",
+                "The full-season window avoids false drift caused by seasonal weather changes.",
+                "Prometheus can read rain_drifted_columns_count from Pushgateway.",
+            ],
+            "artifacts": ["drift_monitoring_dag.py", "reports/monitoring/drift_*.html", "rain_drifted_columns_count"],
+            "color": "#e31b23",
+        },
+    ]
+    selected_dag = st.radio("Monitoring loop", [item["label"] for item in dags], horizontal=True, label_visibility="collapsed")
+    active = next(item for item in dags if item["label"] == selected_dag)
+    monitoring_loop_figure(dags, active["key"])
+    monitoring_timeline_figure(dags, active["key"])
+    interactive_detail(active)
 
 
 def live_demo_page() -> None:
     section_header(
-        "Live system evidence",
-        "Production components visible in the running project",
-        "The operating system is represented by quality gates, orchestration, data lineage, tracking, monitoring, and Kubernetes runtime resources.",
+        "Live demo",
+        "Three checkpoints from artifact to runtime",
+        "The demo connects the repository to a running production-style workflow: DVC lineage, Airflow automation, and Kubernetes runtime resources.",
         "#c99522",
     )
     items = [
-        ("GitHub Actions", "Compile checks, focused tests, dependency pins, and image build validation.", "#2088ff"),
-        ("Airflow", "Scheduled DAGs for ingestion, versioning, end-to-end training, validation, and drift monitoring.", "#017cee"),
-        ("DVC", "Raw/model pointers, reproducible lineage, and remote-backed artifact state on DagsHub.", "#945dd6"),
-        ("MLflow", "Model metrics, parameters, metadata, and artifact logging path.", "#0194e2"),
-        ("Evidently", "Reference/current drift reports with Pushgateway metric handoff.", "#e31b23"),
-        ("Kubernetes", "Pods, services, PVCs, HPAs, PDBs, and model API runtime resources.", "#326ce5"),
+        ("DVC", "Raw data, winner model, and monitoring reference are tracked as artifact pointers instead of hidden local files.", "#945dd6"),
+        ("Airflow", "Scheduled DAGs connect ingestion, DVC/versioning, model retraining, MLflow logging, API validation, and drift checks.", "#017cee"),
+        ("Kubernetes", "The production-style target is described with pods, services, PVCs, HPAs, PDBs, secrets, config maps, and Pushgateway.", "#326ce5"),
     ]
     cards = ["<div class='demo-grid'>"]
     for title, body, color in items:
@@ -1590,24 +2655,24 @@ def live_demo_page() -> None:
     html("".join(cards))
     st.write("")
     compact_header(
-        "Local integration context",
-        "Same-machine service stack",
-        "Docker Compose runs the full stack together for local checks — Kubernetes remains the production-style target.",
-        "#2496ed",
+        "Supporting evidence",
+        "What the live screens prove",
+        "CI protects the contracts before merge; MLflow and Evidently show training and drift evidence; Grafana displays the metrics path fed by monitoring.",
+        "#2088ff",
     )
     services = [
-        ("Nginx", "Gateway", "https://localhost", "#009639"),
-        ("Airflow", "Orchestration", "http://localhost:8080", "#017cee"),
-        ("MLflow", "Tracking UI", "http://localhost:5000", "#0194e2"),
-        ("Prometheus", "Metrics", "http://localhost:9090", "#e6522c"),
-        ("Grafana", "Dashboards", "http://localhost:3000", "#f46800"),
+        ("GitHub Actions", "CI quality gate", "#2088ff"),
+        ("MLflow", "Training evidence", "#0194e2"),
+        ("Evidently", "Drift report", "#e31b23"),
+        ("Prometheus", "Metric scrape path", "#e6522c"),
+        ("Grafana", "Monitoring dashboard", "#f46800"),
     ]
     strip = ["<div class='chip-row'>"]
-    for name, role, url, color in services:
+    for name, role, color in services:
         strip.append(
             f"<div class='tool-chip'>{logo_badge(name, color)}"
             f"<span style='background:transparent;color:var(--ink);width:auto;height:auto;font-size:.85rem'>{escape(name)}</span>"
-            f"<span style='background:transparent;color:var(--muted);width:auto;height:auto;font-size:.78rem;font-weight:700'>{escape(role)} · {escape(url)}</span>"
+            f"<span style='background:transparent;color:var(--muted);width:auto;height:auto;font-size:.78rem;font-weight:700'>{escape(role)}</span>"
             "</div>"
         )
     strip.append("</div>")
@@ -1615,8 +2680,8 @@ def live_demo_page() -> None:
     html(
         """
         <div class="handoff">
-          System summary: the model is no longer only a notebook result. It is a reproducible production workflow with lineage,
-          scheduling, monitoring, CI, and a Kubernetes runtime shape.
+          System summary: the model is no longer only a notebook result. It has artifact lineage, scheduled execution,
+          tracked training output, drift evidence, merge-time checks, and a Kubernetes runtime shape.
         </div>
         """
     )
@@ -1677,7 +2742,7 @@ def deck_controls(index: int, position: str) -> None:
     labels = [label for label, _ in PAGES]
     prev_col, mid_col, next_col = st.columns([1.1, 4.0, 1.1])
     with prev_col:
-        if st.button("Previous", disabled=index == 0, width="stretch", key=f"{position}_previous"):
+        if st.button("Prev", disabled=index == 0, width="stretch", key=f"{position}_previous"):
             st.session_state.active_page = labels[index - 1]
             st.rerun()
     with mid_col:
@@ -1689,10 +2754,12 @@ def deck_controls(index: int, position: str) -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="Rain Prediction MLOps", layout="wide", initial_sidebar_state="expanded")
+    st.set_page_config(page_title="Rain Prediction MLOps", layout="wide", initial_sidebar_state="collapsed")
     inject_theme()
     selected, index = sidebar_navigation()
-    html(f"<div class='slide-badge'>{index + 1} / {len(PAGES)} · {escape(selected.upper())}</div>")
+    scroll_to_top_on_page_change(selected)
+    html(f"<div class='slide-badge-row'><div class='slide-badge'>{index + 1} / {len(PAGES)} · {escape(selected.upper())}</div></div>")
+    deck_controls(index, "header")
     _, renderer = PAGES[index]
     renderer()
     st.divider()
