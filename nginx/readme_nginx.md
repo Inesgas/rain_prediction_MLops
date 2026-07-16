@@ -53,6 +53,30 @@ services:
 
 ```
 
+## Kubernetes Secret
+
+Kubernetes uses the same local certificate and basic-auth files, but they are loaded as a runtime secret instead of being committed to Git.
+The expected local files are:
+
+```text
+nginx/.htpasswd
+nginx/certs/nginx.crt
+nginx/certs/nginx.key
+```
+
+Create the namespace and secret before applying the full Kubernetes stack:
+
+```bash
+kubectl apply -f kubernetes/namespace.yaml
+kubectl create secret generic nginx-tls-and-auth \
+  --namespace rain-prediction \
+  --from-file=nginx.crt=nginx/certs/nginx.crt \
+  --from-file=nginx.key=nginx/certs/nginx.key \
+  --from-file=.htpasswd=nginx/.htpasswd \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl kustomize kubernetes --load-restrictor LoadRestrictionsNone | kubectl apply -f -
+```
+
 ## Useful Commands
 
 ### Add a new user for Basic Authentication

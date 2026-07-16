@@ -311,7 +311,6 @@ rain_prediction_mlops/
 |-- reports/
 |   |-- figures/
 |   `-- versioning/              Airflow/DVC manifest output area
-|-- Slides/                      Final presentation deck artifacts
 |-- src/
 |   |-- config/                  Shared paths and constants
 |   |-- data/                    Extraction, merge, and freshness modules
@@ -735,8 +734,24 @@ The project supports two tracking targets:
 The Airflow integration was adjusted so the local Airflow stack uses the local MLflow service by default.
 This avoids accidental DagsHub `403` failures when hosted MLflow credentials are not configured.
 
-In Kubernetes, Airflow uses `file:///opt/airflow/project/mlruns` in the default config map.
-That stores Kubernetes-triggered tracking output in the PVC-backed Airflow project workspace instead of requiring a separate MLflow server deployment in the default kustomization.
+In Kubernetes, Airflow now points to a dedicated MLflow service deployed inside the cluster (`kubernetes/mlflow-deployment.yaml`, `kubernetes/mlflow-service.yaml`, backed by `kubernetes/mlflow-pvc.yaml` for persistent run/artifact storage).
+`MLFLOW_TRACKING_URI` in `kubernetes/airflow-configmap.yaml` was changed from the local file store (`file:///opt/airflow/project/mlruns`) to `http://mlflow:5000`, so Kubernetes-triggered runs are tracked the same way as local Airflow runs, through a real MLflow tracking server.
+The MLflow UI is reachable through the Nginx gateway at `/mlflow/`, protected by the same basic-auth mechanism as Grafana and Prometheus.
+
+The Nginx TLS certificate, private key, and basic-auth file remain local secret material and are not committed.
+Before applying the full Kubernetes stack, the `nginx-tls-and-auth` secret is created from the local files at `nginx/certs/nginx.crt`, `nginx/certs/nginx.key`, and `nginx/.htpasswd`.
+Keeping this secret outside `kubernetes/kustomization.yaml` allows the manifests to render from a clean checkout while still requiring the runtime secret before the gateway pod starts.
+
+```bash
+kubectl apply -f kubernetes/namespace.yaml
+kubectl create secret generic nginx-tls-and-auth \
+  --namespace rain-prediction \
+  --from-file=nginx.crt=nginx/certs/nginx.crt \
+  --from-file=nginx.key=nginx/certs/nginx.key \
+  --from-file=.htpasswd=nginx/.htpasswd \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl kustomize kubernetes --load-restrictor LoadRestrictionsNone | kubectl apply -f -
+```
 
 | `AIRFLOW_MLFLOW_TRACKING_URI` | Airflow-triggered runs appear in | Manual training runs appear in |
 |-------------------------------|----------------------------------|--------------------------------|
