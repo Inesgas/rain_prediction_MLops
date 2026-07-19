@@ -136,8 +136,8 @@ services:
     build:
       context: .
       dockerfile: docker/airflow/airflow.Dockerfile
-    container_name: airflow
-        # Run the container as the host user's own UID (read from .env, see .env.example)
+    container_name: rain-prediction-airflow
+    # Run the container as the host user's own UID (read from .env, see .env.example)
     # instead of the image's hardcoded UID 50000. Without this, every file Airflow
     # writes into the bind-mounted project dir (./:/opt/airflow/project) ends up
     # owned by UID 50000, which the host user then can't read/write — forcing
