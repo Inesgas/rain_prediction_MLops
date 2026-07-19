@@ -6,6 +6,7 @@ services:
     build:
       context: .
       dockerfile: docker/prediction-api/api.Dockerfile
+    container_name: rain-prediction-api
     restart: unless-stopped
     expose:
       - "8502"
@@ -65,6 +66,19 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
 
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--web.external-url=https://localhost/alertmanager/'
+      - '--web.route-prefix=/alertmanager/'
+    expose:
+      - "9093"
+    volumes:
+      - ./deployment/alertmanager:/etc/alertmanager:ro
+
   pushgateway:
     image: prom/pushgateway:latest
     container_name: pushgateway
@@ -122,8 +136,8 @@ services:
     build:
       context: .
       dockerfile: docker/airflow/airflow.Dockerfile
-    container_name: airflow
-        # Run the container as the host user's own UID (read from .env, see .env.example)
+    container_name: rain-prediction-airflow
+    # Run the container as the host user's own UID (read from .env, see .env.example)
     # instead of the image's hardcoded UID 50000. Without this, every file Airflow
     # writes into the bind-mounted project dir (./:/opt/airflow/project) ends up
     # owned by UID 50000, which the host user then can't read/write — forcing
@@ -175,7 +189,7 @@ services:
         condition: service_started
     volumes:
       - ./airflow/dags:/opt/airflow/dags
-      - ./:/opt/airflow/project 
+      - ./:/opt/airflow/project
       - airflow_logs:/opt/airflow/logs
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]

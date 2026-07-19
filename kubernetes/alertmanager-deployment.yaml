@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: rain-prediction
+  labels:
+    app: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          args:
+            - "--config.file=/etc/alertmanager/alertmanager.yml"
+            - "--web.external-url=https://localhost/alertmanager/"
+            - "--web.route-prefix=/alertmanager/"
+          ports:
+            - containerPort: 9093
+              name: http
+          volumeMounts:
+            - name: alertmanager-config
+              mountPath: /etc/alertmanager/alertmanager.yml
+              subPath: alertmanager.yml
+            - name: alertmanager-smtp
+              mountPath: /etc/alertmanager/secrets/smtp_password
+              subPath: smtp_password
+      volumes:
+        - name: alertmanager-config
+          configMap:
+            name: alertmanager-config
+        - name: alertmanager-smtp
+          secret:
+            secretName: alertmanager-smtp

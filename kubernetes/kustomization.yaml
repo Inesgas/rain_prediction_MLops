@@ -39,6 +39,8 @@ resources:
   - grafana-service.yaml
   - node-exporter-deployment.yaml
   - node-exporter-service.yaml
+  - alertmanager-deployment.yaml
+  - alertmanager-service.yaml
 
   # MLflow experiment tracking
   - mlflow-pvc.yaml
@@ -68,3 +70,8 @@ configMapGenerator: # Prometheus and Grafana configuration/dashboards, generated
       - ../deployment/grafana/dashboards/API-dashboard.json
       - ../deployment/grafana/dashboards/Model-dashboard.json
       - ../deployment/grafana/dashboards/infra-dashboard.json
+
+  - name: alertmanager-config
+    namespace: rain-prediction
+    files:
+      - ../deployment/alertmanager/alertmanager.yml

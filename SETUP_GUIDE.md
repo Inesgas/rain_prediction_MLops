@@ -80,7 +80,28 @@ k3d cluster create rain-prediction-cluster \
   --k3s-arg "--disable=traefik@server:0"
 ```
 
-## Step 7 — Build all Docker images
+## Step 7 — Create the Alertmanager email secret
+
+Create the local SMTP password file used by Alertmanager:
+
+```bash
+mkdir -p deployment/alertmanager/secrets
+printf "<your-smtp-password>" > deployment/alertmanager/secrets/smtp_password
+```
+
+Then create the Kubernetes secret from that local file:
+
+```bash
+kubectl apply -f kubernetes/namespace.yaml
+kubectl create secret generic alertmanager-smtp \
+  --namespace rain-prediction \
+  --from-file=smtp_password=deployment/alertmanager/secrets/smtp_password
+```
+
+The password file is ignored by Git and is mounted into Alertmanager at
+runtime through `smtp_auth_password_file`.
+
+## Step 8 — Build all Docker images
 
 ```bash
 docker build -t rain_prediction_mlops-model-fetcher:latest -f docker/model-fetcher/model-fetcher.Dockerfile .
@@ -100,7 +121,7 @@ docker tag ghcr.io/mlflow/mlflow:v2.17.2 mlflow-local:v2.17.2
 
 (`kubernetes/mlflow-deployment.yaml` already references `mlflow-local:v2.17.2`.)
 
-## Step 8 — Import all images into the cluster
+## Step 9 — Import all images into the cluster
 
 ```bash
 k3d image import \
@@ -113,7 +134,7 @@ k3d image import \
   -c rain-prediction-cluster
 ```
 
-## Step 9 — Deploy everything
+## Step 10 — Deploy everything
 
 ```bash
 kubectl apply -f kubernetes/namespace.yaml
@@ -128,7 +149,7 @@ kubectl create secret generic nginx-tls-and-auth \
 kustomize build kubernetes/ --load-restrictor LoadRestrictionsNone | kubectl apply -f -
 ```
 
-## Step 10 — Verify
+## Step 11 — Verify
 
 ```bash
 kubectl get pods -n rain-prediction

@@ -10,7 +10,7 @@ data/processed/*.csv
 data/preprocessed/*.csv
 data/cleaned/*.csv
 
-# MODELS (GROSS – nur DVC) 
+# MODELS (GROSS – nur DVC)
 models/final_winner/*.joblib
 models/final_winner/*.pkl
 *.joblib
@@ -72,3 +72,4 @@ kubernetes/fastapi-secret.yaml
 .env.local
 .env.*.local
 nginx/.htpasswd
+deployment/alertmanager/secrets/smtp_password

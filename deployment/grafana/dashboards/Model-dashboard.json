@@ -10,11 +10,7 @@
       "id": 1,
       "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
       "targets": [
-        {
-          "expr": "last_over_time(model_rmse_score[24h])",
-          "legendFormat": "RMSE",
-          "datasource": "Prometheus"
-        }
+        { "expr": "last_over_time(model_rmse_score[24h])", "legendFormat": "RMSE", "datasource": "Prometheus" }
       ],
       "fieldConfig": {
         "defaults": {
@@ -36,11 +32,7 @@
       "id": 2,
       "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
       "targets": [
-        {
-          "expr": "last_over_time(model_mae_score[24h])",
-          "legendFormat": "MAE",
-          "datasource": "Prometheus"
-        }
+        { "expr": "last_over_time(model_mae_score[24h])", "legendFormat": "MAE", "datasource": "Prometheus" }
       ],
       "fieldConfig": {
         "defaults": {
@@ -62,11 +54,7 @@
       "id": 3,
       "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
       "targets": [
-        {
-          "expr": "last_over_time(model_r2_score[24h])",
-          "legendFormat": "R²",
-          "datasource": "Prometheus"
-        }
+        { "expr": "last_over_time(model_r2_score[24h])", "legendFormat": "R²", "datasource": "Prometheus" }
       ],
       "fieldConfig": {
         "defaults": {
@@ -88,18 +76,11 @@
       "id": 4,
       "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
       "targets": [
-        {
-          "expr": "absent(last_over_time(model_rmse_score[24h])) == 1 or abs(last_over_time(model_rmse_score[24h])) >= 0",
-          "legendFormat": "Pipeline",
-          "datasource": "Prometheus"
-        }
+        { "expr": "absent(last_over_time(model_rmse_score[24h])) == 1 or abs(last_over_time(model_rmse_score[24h])) >= 0", "legendFormat": "Pipeline", "datasource": "Prometheus" }
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "lineWidth": 0,
-            "fillOpacity": 70
-          },
+          "custom": { "lineWidth": 0, "fillOpacity": 70 },
           "mappings": [
             { "type": "special", "options": { "match": "null", "result": { "text": "WAITING FOR AIRFLOW", "color": "orange" } } },
             { "type": "range", "options": { "from": 0, "to": 999, "result": { "text": "PIPELINE ACTIVE", "color": "green" } } }
@@ -113,16 +94,8 @@
       "id": 5,
       "gridPos": { "h": 10, "w": 12, "x": 0, "y": 6 },
       "targets": [
-        {
-          "expr": "last_over_time(model_rmse_score[24h])",
-          "legendFormat": "RMSE",
-          "datasource": "Prometheus"
-        },
-        {
-          "expr": "last_over_time(model_mae_score[24h])",
-          "legendFormat": "MAE",
-          "datasource": "Prometheus"
-        }
+        { "expr": "last_over_time(model_rmse_score[24h])", "legendFormat": "RMSE", "datasource": "Prometheus" },
+        { "expr": "last_over_time(model_mae_score[24h])", "legendFormat": "MAE", "datasource": "Prometheus" }
       ],
       "fieldConfig": {
         "defaults": {
@@ -136,11 +109,7 @@
       "id": 6,
       "gridPos": { "h": 10, "w": 12, "x": 12, "y": 6 },
       "targets": [
-        {
-          "expr": "last_over_time(model_r2_score[24h])",
-          "legendFormat": "R² Score",
-          "datasource": "Prometheus"
-        }
+        { "expr": "last_over_time(model_r2_score[24h])", "legendFormat": "R² Score", "datasource": "Prometheus" }
       ],
       "fieldConfig": {
         "defaults": {
@@ -152,13 +121,9 @@
       "type": "stat",
       "title": "Current Drift Status",
       "id": 7,
-      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 16 },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 16 },
       "targets": [
-        {
-          "expr": "last_over_time(rain_dataset_drift_detected[24h])",
-          "legendFormat": "Drift",
-          "datasource": "Prometheus"
-        }
+        { "expr": "last_over_time(rain_dataset_drift_detected[24h])", "legendFormat": "Drift", "datasource": "Prometheus" }
       ],
       "fieldConfig": {
         "defaults": {
@@ -178,29 +143,97 @@
       }
     },
     {
-      "type": "state-timeline",
-      "title": "Data Drift Detected Over Time",
+      "type": "stat",
+      "title": "Dataset Drift Detected",
       "id": 8,
-      "gridPos": { "h": 6, "w": 16, "x": 8, "y": 16 },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 16 },
       "targets": [
-        {
-          "expr": "last_over_time(rain_dataset_drift_detected[24h])",
-          "legendFormat": "Drift Status",
-          "datasource": "Prometheus"
-        }
+        { "expr": "rain_dataset_drift_detected", "legendFormat": "Drift", "datasource": "Prometheus" }
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "lineWidth": 0,
-            "fillOpacity": 70
-          },
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 1, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Drifted Columns Share",
+      "id": 9,
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "last_over_time(rain_drifted_columns_share[24h])", "legendFormat": "Share", "datasource": "Prometheus" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 0.3, "color": "orange" },
+              { "value": 0.5, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Last Drift Check",
+      "id": 10,
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 16 },
+      "targets": [
+        { "expr": "time() - rain_drift_check_last_run_timestamp_seconds", "legendFormat": "Seconds since last run", "datasource": "Prometheus" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 172800, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "state-timeline",
+      "title": "Data Drift Detected Over Time",
+      "id": 11,
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 22 },
+      "targets": [
+        { "expr": "last_over_time(rain_dataset_drift_detected[24h])", "legendFormat": "Drift Status", "datasource": "Prometheus" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 0, "fillOpacity": 70 },
           "mappings": [
             { "type": "value", "options": { "0": { "text": "No Drift", "color": "green" } } },
             { "type": "value", "options": { "1": { "text": "DRIFT DETECTED", "color": "red" } } }
           ]
         }
       }
+    },
+    {
+      "type": "timeseries",
+      "title": "Drifted Columns Share Over Time",
+      "id": 12,
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 22 },
+      "targets": [
+        { "expr": "last_over_time(rain_drifted_columns_share[24h])", "legendFormat": "Drifted Columns Share", "datasource": "Prometheus" }
+      ]
     }
   ],
   "refresh": "30s",

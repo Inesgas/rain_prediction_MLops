@@ -9,3 +9,23 @@ groups:
         annotations:
           summary: "Target instance rain-api is offline"
           description: "The underlying FastAPI container replicas failed to respond to the Prometheus scrape request for over 10 seconds."
+
+  - name: rain_drift_monitoring_alerts
+    rules:
+      - alert: RainDatasetDriftDetected
+        expr: rain_dataset_drift_detected == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Dataset drift detected in rain prediction monitoring"
+          description: "Evidently flagged dataset-level drift in the latest scheduled check. See rain_drifted_columns_share for the affected proportion of monitored columns."
+
+      - alert: RainDriftCheckStale
+        expr: time() - rain_drift_check_last_run_timestamp_seconds > 172800
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Drift monitoring hasn't run recently"
+          description: "No Evidently drift check has completed in over 48 hours — the scheduled drift_monitoring DAG may be failing silently."
