@@ -80,6 +80,12 @@ with DAG(
         bash_command=project_command("python -m src.versioning.dvc_versioning dvc-add-model"),
     )
 
+    push_model_artifact = BashOperator(
+        task_id="push_model_artifact_to_dagshub",
+        bash_command=project_command("python -m src.versioning.dvc_versioning dvc-push-model"),
+        execution_timeout=timedelta(minutes=30),
+    )
+
     snapshot_outputs = BashOperator(
         task_id="snapshot_output_versions",
         bash_command=project_command(
@@ -104,9 +110,12 @@ with DAG(
         ),
     )
 
-    local_only_notice = BashOperator(
-        task_id="local_only_no_remote_push",
-        bash_command="echo 'Local-only DVC run complete. No GitHub or DVC remote push was performed.'",
+    restart_api_deployment = BashOperator(
+        task_id="restart_api_deployment",
+        bash_command=project_command(
+            "python -m src.versioning.kubernetes_rollout "
+            "--deployment rain-prediction-api --skip-outside-kubernetes"
+        ),
     )
 
     end = EmptyOperator(task_id="end")
@@ -119,9 +128,10 @@ with DAG(
         >> snapshot_inputs
         >> train_winner_model
         >> version_model_artifact
+        >> push_model_artifact
         >> snapshot_outputs
         >> log_model_to_mlflow
         >> dvc_status
-        >> local_only_notice
+        >> restart_api_deployment
         >> end
     )

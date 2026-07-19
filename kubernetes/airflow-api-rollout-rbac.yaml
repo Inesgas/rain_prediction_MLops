@@ -1,0 +1,29 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: airflow-api-rollout-restarter
+  namespace: rain-prediction
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    resourceNames:
+      - rain-prediction-api
+    verbs:
+      - get
+      - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: airflow-api-rollout-restarter
+  namespace: rain-prediction
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: rain-prediction
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: airflow-api-rollout-restarter

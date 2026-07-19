@@ -15,6 +15,7 @@ from typing import Any, Iterable, Sequence
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_REPORT_DIR = PROJECT_ROOT / "reports" / "versioning"
 DEFAULT_MODEL_ARTIFACT = PROJECT_ROOT / "models" / "final_winner" / "winner_model.joblib"
+DEFAULT_MODEL_POINTER = PROJECT_ROOT / "models" / "final_winner" / "winner_model.joblib.dvc"
 DEFAULT_MODEL_METADATA = PROJECT_ROOT / "models" / "final_winner" / "metadata.json"
 DEFAULT_MODEL_CONFIG = PROJECT_ROOT / "models" / "final_winner" / "model_config.json"
 DEFAULT_MODEL_SAMPLE = PROJECT_ROOT / "models" / "final_winner" / "sample_input.json"
@@ -329,6 +330,40 @@ def dvc_add_model(model_path: Path = DEFAULT_MODEL_ARTIFACT) -> None:
     dvc_add_path(model_path)
 
 
+def configure_dvc_remote_auth(remote_name: str = "origin") -> None:
+    remote_url = os.environ.get("DVC_REMOTE_URL", "https://dagshub.com/Inesgas/rain_prediction_MLops.dvc")
+    remote_user = os.environ.get("DVC_REMOTE_USER")
+    remote_password = os.environ.get("DVC_REMOTE_PASSWORD")
+    if not remote_user or not remote_password:
+        raise SystemExit(
+            "DVC_REMOTE_USER and DVC_REMOTE_PASSWORD are required before pushing "
+            "model artifacts to DagsHub."
+        )
+
+    run_command(
+        ["dvc", "remote", "add", "-d", remote_name, remote_url],
+        check=False,
+        echo=False,
+    )
+    run_command(["dvc", "remote", "modify", remote_name, "url", remote_url])
+    run_command(["dvc", "remote", "modify", "--local", remote_name, "auth", "basic"])
+    run_command(["dvc", "remote", "modify", "--local", remote_name, "user", remote_user], echo=False)
+    run_command(["dvc", "remote", "modify", "--local", remote_name, "password", remote_password], echo=False)
+
+
+def dvc_push_targets(targets: Iterable[Path], remote_name: str = "origin") -> None:
+    configure_dvc_remote_auth(remote_name=remote_name)
+    push_args = ["dvc", "push", "--remote", remote_name]
+    push_args.extend(relative(target) for target in targets)
+    run_command(push_args)
+
+
+def dvc_push_model(model_pointer: Path = DEFAULT_MODEL_POINTER, remote_name: str = "origin") -> None:
+    if not model_pointer.exists():
+        raise SystemExit(f"DVC model pointer does not exist: {model_pointer}")
+    dvc_push_targets([model_pointer], remote_name=remote_name)
+
+
 def dvc_status(output_dir: Path, run_id: str | None) -> Path:
     result = command_snapshot(["dvc", "status"], cwd=PROJECT_ROOT)
     safe_run_id = (run_id or "manual").replace("/", "_").replace(":", "_")
@@ -374,6 +409,14 @@ def build_parser() -> argparse.ArgumentParser:
     add_parser = subparsers.add_parser("dvc-add-model", help="Track the trained model artifact with DVC.")
     add_parser.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_ARTIFACT)
 
+    push_model_parser = subparsers.add_parser("dvc-push-model", help="Push the DVC-tracked trained model artifact to the remote.")
+    push_model_parser.add_argument("--model-pointer", type=Path, default=DEFAULT_MODEL_POINTER)
+    push_model_parser.add_argument("--remote", default="origin")
+
+    push_parser = subparsers.add_parser("dvc-push", help="Push one or more DVC targets to the remote.")
+    push_parser.add_argument("--target", action="append", type=Path, required=True)
+    push_parser.add_argument("--remote", default="origin")
+
     generic_add_parser = subparsers.add_parser("dvc-add", help="Track a local path with DVC.")
     generic_add_parser.add_argument("--target", type=Path, required=True)
 
@@ -392,6 +435,10 @@ def main() -> None:
         dvc_status(output_dir=args.output_dir, run_id=args.run_id)
     elif args.command == "dvc-add-model":
         dvc_add_model(model_path=args.model_path)
+    elif args.command == "dvc-push-model":
+        dvc_push_model(model_pointer=args.model_pointer, remote_name=args.remote)
+    elif args.command == "dvc-push":
+        dvc_push_targets(targets=args.target, remote_name=args.remote)
     elif args.command == "dvc-add":
         dvc_add_path(path=args.target)
     else:

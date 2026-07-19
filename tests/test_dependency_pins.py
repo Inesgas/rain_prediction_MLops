@@ -11,6 +11,7 @@ ALLOWED_PLOTLY_PIN = "plotly==5.24.1"
 ALLOWED_CRYPTOGRAPHY_RANGE = "cryptography>=43.0.1,<45"
 ALLOWED_CFFI_RANGE = "cffi<2.0.0"
 MIN_PROMETHEUS_CLIENT = "prometheus-client>=0.20.0"
+KUBERNETES_CLIENT_RANGE = "kubernetes>=30.0.0,<32.0.0"
 REQUIREMENT_FILES = [
     PROJECT_ROOT / "requirements.txt",
     PROJECT_ROOT / "docker" / "airflow" / "airflow_requirements.txt",
@@ -122,4 +123,17 @@ def test_airflow_pushgateway_client_dependency_is_present():
     assert not missing_files, (
         "Airflow drift monitoring pushes metrics to Pushgateway and needs "
         f"{MIN_PROMETHEUS_CLIENT}: {missing_files}"
+    )
+
+
+def test_airflow_kubernetes_client_dependency_is_present():
+    missing_files = [
+        str(path.relative_to(PROJECT_ROOT))
+        for path in AIRFLOW_REQUIREMENT_FILES
+        if KUBERNETES_CLIENT_RANGE not in requirement_lines(path)
+    ]
+
+    assert not missing_files, (
+        "Airflow restarts the Kubernetes API deployment after model publishing and needs "
+        f"{KUBERNETES_CLIENT_RANGE}: {missing_files}"
     )

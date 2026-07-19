@@ -2,21 +2,22 @@ resources:
   # Shared namespace.
   - namespace.yaml
 
-  # Ines scope: Airflow configuration, metadata services, and migration job.
+  # Airflow configuration, metadata services, and migration job.
   - airflow-secret.yaml
   - airflow-configmap.yaml
+  - airflow-api-rollout-rbac.yaml
   - airflow-pvc.yaml
   - airflow-postgres.yaml
   - airflow-redis.yaml
   - airflow-migrate-job.yaml
 
-  # Andrey base: FastAPI resources are included unchanged for the full stack.
+  # FastAPI serving resources.
   - fastapi-deployment.yaml
   - fastapi-service.yaml
   - fastapi-hpa.yaml
   - fastapi-pdb.yaml
 
-  # Ines scope: Airflow webserver, scheduler, workers, autoscaling, and service.
+  # Airflow webserver, scheduler, workers, autoscaling, and service.
   - airflow-deployment.yaml
   - airflow-scheduler-deployment.yaml
   - airflow-worker-deployment.yaml
@@ -24,7 +25,7 @@ resources:
   - airflow-pdb.yaml
   - airflow-service.yaml
 
-  # Ines scope: Pushgateway endpoint used by the Airflow drift-monitoring DAG.
+  # Pushgateway endpoint used by the Airflow drift-monitoring DAG.
   - pushgateway-deployment.yaml
   - pushgateway-service.yaml
 

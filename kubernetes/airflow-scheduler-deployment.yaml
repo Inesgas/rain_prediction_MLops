@@ -61,6 +61,7 @@ spec:
               trap - EXIT
               cd /opt/airflow/project
               echo "Pulling raw weather dataset from DagsHub..."
+              dvc remote add -d origin https://dagshub.com/Inesgas/rain_prediction_MLops.dvc || dvc remote modify origin url https://dagshub.com/Inesgas/rain_prediction_MLops.dvc
               dvc remote modify origin --local auth basic
               dvc remote modify origin --local user "$DVC_REMOTE_USER"
               dvc remote modify origin --local password "$DVC_REMOTE_PASSWORD"

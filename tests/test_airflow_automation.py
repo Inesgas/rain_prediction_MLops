@@ -123,6 +123,28 @@ def test_kubernetes_includes_airflow_pushgateway_dependency():
     assert "- pushgateway-service.yaml" in kustomization
 
 
+def test_kubernetes_includes_airflow_api_rollout_rbac():
+    kustomization = (PROJECT_ROOT / "kubernetes" / "kustomization.yaml").read_text(encoding="utf-8")
+    rbac = (PROJECT_ROOT / "kubernetes" / "airflow-api-rollout-rbac.yaml").read_text(encoding="utf-8")
+
+    assert "- airflow-api-rollout-rbac.yaml" in kustomization
+    assert "resourceNames:" in rbac
+    assert "- rain-prediction-api" in rbac
+    assert "name: default" in rbac
+    assert "patch" in rbac
+
+
+def test_data_model_versioning_publishes_model_and_restarts_api():
+    dag_text = (PROJECT_ROOT / "airflow" / "dags" / "data_model_versioning_dag.py").read_text(encoding="utf-8")
+
+    assert "push_model_artifact_to_dagshub" in dag_text
+    assert "python -m src.versioning.dvc_versioning dvc-push-model" in dag_text
+    assert "restart_api_deployment" in dag_text
+    assert "python -m src.versioning.kubernetes_rollout" in dag_text
+    assert "rain-prediction-api" in dag_text
+    assert "local_only_no_remote_push" not in dag_text
+
+
 def test_airflow_dags_have_expected_schedule_wiring():
     for filename, (dag_id, expected_schedule) in DAG_SCHEDULES.items():
         kwargs = dag_kwargs(PROJECT_ROOT / "airflow" / "dags" / filename)

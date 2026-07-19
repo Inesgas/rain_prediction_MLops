@@ -21,6 +21,7 @@ mlflow-skinny==2.17.2
 plotly==5.24.1
 evidently==0.7.21
 prometheus-client>=0.20.0
+kubernetes>=30.0.0,<32.0.0
 # Evidently needs cryptography>=43, but Airflow 2.10.5 providers/pyOpenSSL
 # are not compatible with the latest cryptography/cffi major versions.
 cryptography>=43.0.1,<45
