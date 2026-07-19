@@ -6,6 +6,7 @@ services:
     build:
       context: .
       dockerfile: docker/prediction-api/api.Dockerfile
+    container_name: rain-prediction-api
     restart: unless-stopped
     expose:
       - "8502"

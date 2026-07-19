@@ -4,19 +4,19 @@ __pycache__/
 .ipynb_checkpoints/
 *.ipynb
 
-# DATA
+# DATA (GROSS – nur DVC) - 23.06.26 ingore only csv data and not .dvc-pointer, gitignore, subfolders - *.csv maybe ignore versioned files
 data/raw/*.csv
 data/processed/*.csv
 data/preprocessed/*.csv
 data/cleaned/*.csv
 
-# MODELS
+# MODELS (GROSS – nur DVC)
 models/final_winner/*.joblib
 models/final_winner/*.pkl
 *.joblib
 *.pkl
 
-# MLflow
+# MLflow (GROSS)
 mlflow/artifacts/
 mlflow/db/
 mlflow/*.db
