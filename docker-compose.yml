@@ -73,8 +73,8 @@ services:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
       - '--web.external-url=https://localhost/alertmanager/'
       - '--web.route-prefix=/alertmanager/'
-    ports:
-      - "9093:9093"
+    expose:
+      - "9093"
     volumes:
       - ./deployment/alertmanager:/etc/alertmanager:ro
 

@@ -4,19 +4,19 @@ __pycache__/
 .ipynb_checkpoints/
 *.ipynb
 
-# DATA (GROSS – nur DVC) - 23.06.26 ingore only csv data and not .dvc-pointer, gitignore, subfolders - *.csv maybe ignore versioned files
+# DATA
 data/raw/*.csv
 data/processed/*.csv
 data/preprocessed/*.csv
 data/cleaned/*.csv
 
-# MODELS (GROSS – nur DVC) 
+# MODELS
 models/final_winner/*.joblib
 models/final_winner/*.pkl
 *.joblib
 *.pkl
 
-# MLflow (GROSS)
+# MLflow
 mlflow/artifacts/
 mlflow/db/
 mlflow/*.db
@@ -72,3 +72,4 @@ kubernetes/fastapi-secret.yaml
 .env.local
 .env.*.local
 nginx/.htpasswd
+deployment/alertmanager/secrets/smtp_password

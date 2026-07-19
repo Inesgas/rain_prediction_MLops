@@ -19,6 +19,13 @@ spec:
         - name: alertmanager
           image: prom/alertmanager:latest
           imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
           args:
             - "--config.file=/etc/alertmanager/alertmanager.yml"
             - "--web.external-url=https://localhost/alertmanager/"
@@ -30,7 +37,13 @@ spec:
             - name: alertmanager-config
               mountPath: /etc/alertmanager/alertmanager.yml
               subPath: alertmanager.yml
+            - name: alertmanager-smtp
+              mountPath: /etc/alertmanager/secrets/smtp_password
+              subPath: smtp_password
       volumes:
         - name: alertmanager-config
           configMap:
             name: alertmanager-config
+        - name: alertmanager-smtp
+          secret:
+            secretName: alertmanager-smtp
