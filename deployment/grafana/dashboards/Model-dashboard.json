@@ -11,7 +11,7 @@
       "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "model_rmse_score",
+          "expr": "last_over_time(model_rmse_score[24h])",
           "legendFormat": "RMSE",
           "datasource": "Prometheus"
         }
@@ -37,7 +37,7 @@
       "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
       "targets": [
         {
-          "expr": "model_mae_score",
+          "expr": "last_over_time(model_mae_score[24h])",
           "legendFormat": "MAE",
           "datasource": "Prometheus"
         }
@@ -63,7 +63,7 @@
       "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
       "targets": [
         {
-          "expr": "model_r2_score",
+          "expr": "last_over_time(model_r2_score[24h])",
           "legendFormat": "R²",
           "datasource": "Prometheus"
         }
@@ -89,7 +89,7 @@
       "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
       "targets": [
         {
-          "expr": "absent(model_rmse_score) == 1 or abs(model_rmse_score) >= 0",
+          "expr": "absent(last_over_time(model_rmse_score[24h])) == 1 or abs(last_over_time(model_rmse_score[24h])) >= 0",
           "legendFormat": "Pipeline",
           "datasource": "Prometheus"
         }
@@ -114,12 +114,12 @@
       "gridPos": { "h": 10, "w": 12, "x": 0, "y": 6 },
       "targets": [
         {
-          "expr": "model_rmse_score",
+          "expr": "last_over_time(model_rmse_score[24h])",
           "legendFormat": "RMSE",
           "datasource": "Prometheus"
         },
         {
-          "expr": "model_mae_score",
+          "expr": "last_over_time(model_mae_score[24h])",
           "legendFormat": "MAE",
           "datasource": "Prometheus"
         }
@@ -137,7 +137,7 @@
       "gridPos": { "h": 10, "w": 12, "x": 12, "y": 6 },
       "targets": [
         {
-          "expr": "model_r2_score",
+          "expr": "last_over_time(model_r2_score[24h])",
           "legendFormat": "R² Score",
           "datasource": "Prometheus"
         }
@@ -147,9 +147,63 @@
           "custom": { "drawStyle": "line", "lineInterpolation": "smooth" }
         }
       }
+    },
+    {
+      "type": "stat",
+      "title": "Current Drift Status",
+      "id": 7,
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "last_over_time(rain_dataset_drift_detected[24h])",
+          "legendFormat": "Drift",
+          "datasource": "Prometheus"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "No Drift", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "DRIFT DETECTED", "color": "red" } } }
+          ],
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 1, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "state-timeline",
+      "title": "Data Drift Detected Over Time",
+      "id": 8,
+      "gridPos": { "h": 6, "w": 16, "x": 8, "y": 16 },
+      "targets": [
+        {
+          "expr": "last_over_time(rain_dataset_drift_detected[24h])",
+          "legendFormat": "Drift Status",
+          "datasource": "Prometheus"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 0,
+            "fillOpacity": 70
+          },
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "No Drift", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "DRIFT DETECTED", "color": "red" } } }
+          ]
+        }
+      }
     }
   ],
-  "refresh": "5s",
+  "refresh": "30s",
   "schemaVersion": 38,
   "style": "dark",
   "title": "Model Performance & Drift",
