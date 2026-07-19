@@ -21,6 +21,20 @@ I followed your automated model rollout note and added the missing pieces on thi
 - Airflow init now removes stale seeded DVC files before pulling from DagsHub, so the PVC starts from the remote artifact state.
 - Open-Meteo extraction now continues when only a small number of stations fail. It still fails if all locations fail or no rows are produced.
 
+## Latest PR refresh
+
+The latest pushed branch includes the fixes from the local Kubernetes demo debugging session:
+
+- `docker/model-fetcher/fetch_model.sh`
+- `docker/model-fetcher/model-fetcher.Dockerfile`
+- `kubernetes/airflow-deployment.yaml`
+- `kubernetes/airflow-scheduler-deployment.yaml`
+- `kubernetes/airflow-worker-deployment.yaml`
+- `kubernetes/airflow-migrate-job.yaml`
+- `src/data/extract_open_meteo_daily.py`
+
+These changes are intentionally on this review branch, not on `main`.
+
 ## What I verified locally
 
 - Airflow has 4 active DAGs with no import errors:
