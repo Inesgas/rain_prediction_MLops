@@ -31,6 +31,9 @@ spec:
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsUser: 0
+          envFrom:
+            - secretRef:
+                name: dagshub-credentials
           command: ["bash", "-c"]
           args:
             - |
@@ -62,6 +65,15 @@ spec:
               sed -i '/^\[core\]/a\    no_scm = true' /opt/airflow/project/.dvc/config
               rmdir /opt/airflow/project/.dvc_config_lock
               trap - EXIT
+              cd /opt/airflow/project
+              echo "Pulling raw weather dataset from DagsHub..."
+              dvc remote modify origin --local auth basic
+              dvc remote modify origin --local user "$DVC_REMOTE_USER"
+              dvc remote modify origin --local password "$DVC_REMOTE_PASSWORD"
+              dvc pull data/raw/weatherAUS.csv.dvc -f
+              dvc pull data/preprocessed/rain_model_dataset_aligned.csv.dvc -f
+              dvc pull data/preprocessed/rain_model_dataset.csv.dvc -f
+              dvc pull data/preprocessed/rain_model_dataset_feature_experiments.csv.dvc -f
               chown -R 50000:0 /opt/airflow/project
               chmod -R g+rwX /opt/airflow/project
           volumeMounts:
@@ -80,18 +92,29 @@ spec:
                 name: airflow-config
             - secretRef:
                 name: airflow-secret
+            - secretRef:
+                name: dagshub-credentials
       containers:
         - name: worker
           image: rain_prediction_mlops-airflow:inesgas-airflow-20260713
           imagePullPolicy: IfNotPresent
           command: ["bash", "-c"]
           args:
-            - exec airflow celery worker
+            # --without-gossip reduces unnecessary inter-worker chatter.
+            # A SIGTERM triggers Celery's warm shutdown: the worker stops
+            # accepting new tasks but finishes any task already in progress
+            # before exiting, instead of killing it immediately. Combined
+            # with terminationGracePeriodSeconds below, this gives in-flight
+            # Airflow tasks time to finish instead of being killed mid-run
+            # when the HPA scales the worker deployment down.
+            - exec airflow celery worker --without-gossip
           envFrom:
             - configMapRef:
                 name: airflow-config
             - secretRef:
                 name: airflow-secret
+            - secretRef:
+                name: dagshub-credentials
           livenessProbe:
             exec:
               command:

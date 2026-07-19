@@ -8,11 +8,17 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: rain-prediction-airflow-worker
+  # Widened slightly from 2 to give a bit more headroom before scaling
+  # is needed at all, while keeping true autoscaling (not fixed at max).
   minReplicas: 2
-  maxReplicas: 3
+  maxReplicas: 4
   behavior:
     scaleDown:
-      stabilizationWindowSeconds: 1800
+      # Raised from 1800s (30 min) to 3600s (1 hour). Airflow DAG runs in
+      # this project typically take 15-30 minutes; a longer stabilization
+      # window makes it much less likely that a scale-down decision lands
+      # in the middle of an active task run.
+      stabilizationWindowSeconds: 3600
       policies:
         - type: Pods
           value: 1
@@ -26,9 +32,15 @@ spec:
           periodSeconds: 60
       selectPolicy: Max
   metrics:
+    # Switched from CPU to memory. Airflow worker tasks in this project are
+    # I/O-bound (HTTP calls to Open-Meteo, DVC pulls from DagsHub) and use
+    # very little CPU even while actively running a task, which caused the
+    # CPU-based HPA to scale down workers that were mid-task. Memory usage
+    # (loading CSVs/DataFrames, holding HTTP responses) is a more reliable
+    # signal of whether a worker is actually busy for this workload.
     - type: Resource
       resource:
-        name: cpu
+        name: memory
         target:
           type: Utilization
           averageUtilization: 70
