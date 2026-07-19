@@ -33,6 +33,7 @@ resources:
   - nginx-service.yaml
   - prometheus-deployment.yaml
   - prometheus-service.yaml
+  - prometheus-rbac.yaml
   - grafana-deployment.yaml
   - grafana-service.yaml
   - node-exporter-deployment.yaml

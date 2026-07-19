@@ -358,7 +358,7 @@ class TestAuthentication:
         print_test_header("Security - Admin accessing /model/info", "HTTP 200 OK")
         response = get(
             f"{API_URL}/model/info", 
-            headers=get_auth_header(VALID_AUTH["username"], VALID_AUTH["password"])
+            headers=get_auth_header("admin", "admin")
         )
         assert response.status_code == 200
         print_result("PASS", f"HTTP {response.status_code}")

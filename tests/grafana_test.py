@@ -18,8 +18,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 API_URL = "https://localhost"
 VERIFY_SSL = False
-ADMIN_USERNAME = os.getenv("NGINX_ADMIN_USER")
-ADMIN_PASSWORD = os.getenv("NGINX_ADMIN_PASSWORD")
+ADMIN_USERNAME = "admin"
+ADMIN_PASSWORD = "admin"
 
 # Complete list of 54 supported locations
 ALL_LOCATIONS = [
