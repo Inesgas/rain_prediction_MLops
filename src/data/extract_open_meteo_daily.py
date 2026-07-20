@@ -310,11 +310,17 @@ def fetch_open_meteo_daily(
         except Exception as exc:
             failures.append({"location": str(row.location), "error": str(exc)})
 
+    if not frames:
+        if failures:
+            details = "; ".join(f"{item['location']}: {item['error']}" for item in failures[:5])
+            raise RuntimeError(f"Open-Meteo extraction failed for all {len(failures)} location(s): {details}")
+        raise RuntimeError("Open-Meteo extraction produced no rows.")
     if failures:
         details = "; ".join(f"{item['location']}: {item['error']}" for item in failures[:5])
-        raise RuntimeError(f"Open-Meteo extraction failed for {len(failures)} location(s): {details}")
-    if not frames:
-        raise RuntimeError("Open-Meteo extraction produced no rows.")
+        print(
+            "WARNING: Open-Meteo extraction skipped "
+            f"{len(failures)} of {len(locations)} location(s): {details}"
+        )
 
     output = pd.concat(frames, ignore_index=True)
     output = output.sort_values(["Location", "Date"]).reset_index(drop=True)
