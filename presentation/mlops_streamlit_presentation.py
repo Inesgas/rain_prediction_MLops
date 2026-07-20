@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import io
 import json
 import math
+import re
+from contextvars import ContextVar
 from datetime import date, timedelta
 from html import escape
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
+import resvg_py
+from PIL import Image
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -57,6 +62,48 @@ def fmt_int(value: object) -> str:
         return f"{int(value):,}"
     except (TypeError, ValueError):
         return "n/a"
+
+
+def fmt_bytes(value: object) -> str:
+    try:
+        size = float(value)
+    except (TypeError, ValueError):
+        return "n/a"
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return "n/a"
+
+
+def read_dvc_pointer(path: Path) -> dict[str, object]:
+    values: dict[str, object] = {"md5": "unavailable", "size": None, "path": path.stem}
+    if not path.exists():
+        return values
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip().lstrip("-").strip()
+        if ":" not in stripped:
+            continue
+        key, value = [part.strip() for part in stripped.split(":", 1)]
+        if key == "size":
+            try:
+                values[key] = int(value)
+            except ValueError:
+                values[key] = None
+        elif key in {"md5", "path"}:
+            values[key] = value
+    return values
+
+
+def read_dvc_remote_url() -> str:
+    config_path = PROJECT_ROOT / ".dvc" / "config"
+    if not config_path.exists():
+        return "DVC remote not configured"
+    for line in config_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("url") and "=" in stripped:
+            return stripped.split("=", 1)[1].strip()
+    return "DVC remote not configured"
 
 
 FEATURE_GROUPS: list[tuple[str, tuple[str, ...]]] = [
@@ -117,6 +164,154 @@ def html(markup: str) -> None:
     st.markdown(markup, unsafe_allow_html=True)
 
 
+@st.cache_data(show_spinner=False)
+def svg_animation_bytes(svg: str) -> bytes:
+    """Rasterize a short animated GIF so every browser renders the illustration."""
+    frames: list[Image.Image] = []
+    for frame_index in range(8):
+        dash_offset = frame_index * 7
+        pulse_opacity = 0.84 + 0.16 * math.sin((frame_index / 8) * math.tau) ** 2
+        frame_svg = re.sub(
+            r"class=(['\"])flow-dash\1",
+            f"class='flow-dash' style='stroke-dasharray:12 10;stroke-dashoffset:-{dash_offset}'",
+            svg,
+        )
+        frame_svg = re.sub(
+            r"class=(['\"])pulse\1",
+            f"class='pulse' opacity='{pulse_opacity:.2f}'",
+            frame_svg,
+        )
+        viewbox = re.search(r"viewBox=(['\"])0 0 ([0-9.]+) ([0-9.]+)\1", frame_svg)
+        source_width = float(viewbox.group(2)) if viewbox else 1200.0
+        source_height = float(viewbox.group(3)) if viewbox else 650.0
+        output_width = 1440
+        output_height = round(output_width * source_height / source_width)
+        png = resvg_py.svg_to_bytes(
+            svg_string=frame_svg,
+            width=output_width,
+            height=output_height,
+        )
+        rendered = Image.open(io.BytesIO(png)).convert("RGBA")
+        background = Image.new("RGBA", rendered.size, "#f5f8fa")
+        background.alpha_composite(rendered)
+        frame = background.convert("RGB").convert("P", palette=Image.Palette.ADAPTIVE, colors=192)
+        frames.append(frame)
+    output = io.BytesIO()
+    frames[0].save(
+        output,
+        format="GIF",
+        save_all=True,
+        append_images=frames[1:],
+        duration=130,
+        loop=0,
+        optimize=False,
+        disposal=2,
+    )
+    return output.getvalue()
+
+
+@st.cache_data(show_spinner=False)
+def svg_sequence_animation_bytes(svgs: tuple[str, ...]) -> bytes:
+    """Render several visual states into one automatically cycling GIF."""
+    frames: list[Image.Image] = []
+    frames_per_state = 4
+    for state_index, svg in enumerate(svgs):
+        for local_frame in range(frames_per_state):
+            frame_index = state_index * frames_per_state + local_frame
+            dash_offset = frame_index * 8
+            pulse_opacity = 0.86 + 0.14 * math.sin((local_frame / frames_per_state) * math.tau) ** 2
+            frame_svg = re.sub(
+                r"class=(['\"])flow-dash\1",
+                f"class='flow-dash' style='stroke-dasharray:12 10;stroke-dashoffset:-{dash_offset}'",
+                svg,
+            )
+            frame_svg = re.sub(
+                r"class=(['\"])pulse\1",
+                f"class='pulse' opacity='{pulse_opacity:.2f}'",
+                frame_svg,
+            )
+            viewbox = re.search(r"viewBox=(['\"])0 0 ([0-9.]+) ([0-9.]+)\1", frame_svg)
+            source_width = float(viewbox.group(2)) if viewbox else 1200.0
+            source_height = float(viewbox.group(3)) if viewbox else 650.0
+            output_width = 1200
+            output_height = round(output_width * source_height / source_width)
+            png = resvg_py.svg_to_bytes(svg_string=frame_svg, width=output_width, height=output_height)
+            rendered = Image.open(io.BytesIO(png)).convert("RGBA")
+            background = Image.new("RGBA", rendered.size, "#f5f8fa")
+            background.alpha_composite(rendered)
+            frames.append(background.convert("RGB").convert("P", palette=Image.Palette.ADAPTIVE, colors=160))
+    output = io.BytesIO()
+    frames[0].save(
+        output,
+        format="GIF",
+        save_all=True,
+        append_images=frames[1:],
+        duration=300,
+        loop=0,
+        optimize=False,
+        disposal=2,
+    )
+    return output.getvalue()
+
+
+def styled_svg(markup: str) -> str | None:
+    start = markup.find("<svg")
+    end = markup.rfind("</svg>")
+    if start < 0 or end < 0:
+        return None
+    svg = markup[start : end + len("</svg>")]
+    style = """
+      <style>
+        text { font-family: 'Segoe UI', Arial, sans-serif; }
+        .svg-label { fill:#173848; font-weight:850; }
+        .svg-muted { fill:#667b85; font-weight:650; }
+        .svg-kicker { font-weight:900; letter-spacing:1.6px; }
+        .flow-dash { stroke-dasharray:12 10; animation:flowdash 2.2s linear infinite; }
+        .pulse { transform-box:fill-box; transform-origin:center; animation:visualpulse 2.4s ease-in-out infinite; }
+        @keyframes flowdash { to { stroke-dashoffset:-44; } }
+        @keyframes visualpulse {
+          0%,100% { transform:scale(1); opacity:.92; }
+          50% { transform:scale(1.05); opacity:1; }
+        }
+      </style>
+    """
+    opening_end = svg.find(">") + 1
+    opening_tag = svg[:opening_end]
+    # resvg accepts shapes without the SVG namespace but silently drops text.
+    # Add the namespace before rasterizing so every GIF keeps its labels.
+    if "xmlns=" not in opening_tag:
+        opening_tag = opening_tag.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"', 1)
+    return f"{opening_tag}{style}{svg[opening_end:]}"
+
+
+_VISUAL_CAPTURE: ContextVar[list[str] | None] = ContextVar("visual_capture", default=None)
+
+
+def visual(markup: str) -> None:
+    """Render SVG artwork as an animated image with no browser SVG dependency."""
+    capture = _VISUAL_CAPTURE.get()
+    if capture is not None:
+        capture.append(markup)
+        return
+    svg = styled_svg(markup)
+    if svg is not None:
+        st.image(svg_animation_bytes(svg), width="stretch")
+
+
+def autoplay_visual(renderer: Callable[[str], None], states: Iterable[str]) -> None:
+    """Capture every visual state and play them as one hands-free animation."""
+    captured: list[str] = []
+    token = _VISUAL_CAPTURE.set(captured)
+    try:
+        for state in states:
+            renderer(state)
+    finally:
+        _VISUAL_CAPTURE.reset(token)
+    svgs = tuple(svg for markup in captured if (svg := styled_svg(markup)) is not None)
+    if svgs:
+        st.image(svg_sequence_animation_bytes(svgs), width="stretch")
+
+
 def scroll_to_top_on_page_change(selected: str) -> None:
     if st.session_state.get("_last_rendered_page") == selected:
         return
@@ -160,17 +355,46 @@ def load_sample_input() -> dict:
 
 @st.cache_data
 def load_locations() -> pd.DataFrame:
-    for path in LOCATIONS_METADATA_PATHS:
-        if path.exists():
-            frame = pd.read_csv(path)
-            break
-    else:
+    frames = [pd.read_csv(path) for path in LOCATIONS_METADATA_PATHS if path.exists()]
+    if not frames:
         return pd.DataFrame(columns=["location", "lat", "lon", "elevation", "rainfall_zone"])
 
-    keep = [col for col in ["location", "lat", "lon", "elevation", "rainfall_zone"] if col in frame.columns]
-    frame = frame[keep].copy()
-    if "rainfall_zone" not in frame.columns:
+    # Coordinates live in the base metadata, while the rainfall-zone enrichment
+    # is written to the daily-zonal metadata. Merge both instead of returning the
+    # first file found (which previously made every zone appear as "Unknown").
+    base = next(
+        (
+            frame.copy()
+            for frame in frames
+            if {"location", "lat", "lon"}.issubset(frame.columns)
+        ),
+        pd.DataFrame(),
+    )
+    if base.empty:
+        return pd.DataFrame(columns=["location", "lat", "lon", "elevation", "rainfall_zone"])
+
+    keep = [col for col in ["location", "lat", "lon", "elevation"] if col in base.columns]
+    frame = base[keep].copy()
+    frame["location"] = frame["location"].astype(str).str.strip()
+
+    zone_frames = []
+    for source in frames:
+        if {"location", "rainfall_zone"}.issubset(source.columns):
+            zones = source[["location", "rainfall_zone"]].copy()
+            zones["location"] = zones["location"].astype(str).str.strip()
+            zones["rainfall_zone"] = zones["rainfall_zone"].map(normalize_rainfall_zone)
+            zones = zones.loc[zones["rainfall_zone"] != "Unknown"]
+            zone_frames.append(zones)
+    if zone_frames:
+        zone_lookup = (
+            pd.concat(zone_frames, ignore_index=True)
+            .drop_duplicates(subset=["location"], keep="last")
+        )
+        frame = frame.merge(zone_lookup, on="location", how="left")
+    else:
         frame["rainfall_zone"] = "Unknown"
+
+    frame["rainfall_zone"] = frame["rainfall_zone"].map(normalize_rainfall_zone)
     if "elevation" not in frame.columns:
         frame["elevation"] = None
     return (
@@ -257,10 +481,10 @@ def inject_theme() -> None:
         }
         .block-container {
           max-width: 1500px;
-          padding-top: 1.4rem;
+          padding-top: .75rem;
           padding-left: 2rem;
           padding-right: 2rem;
-          padding-bottom: 2.6rem;
+          padding-bottom: 1rem;
           animation: slidein .38s ease;
         }
         @keyframes slidein {
@@ -296,7 +520,16 @@ def inject_theme() -> None:
           background: rgba(31,118,210,.12);
           border-color: rgba(31,118,210,.48);
         }
+        [data-testid="stImage"] {
+          display:flex;
+          justify-content:center;
+        }
         [data-testid="stImage"] img {
+          width:auto !important;
+          height:auto !important;
+          max-width:100%;
+          max-height:62vh;
+          object-fit:contain;
           border-radius: 14px;
           box-shadow: 0 18px 44px rgba(23,56,72,.14);
           border: 1px solid var(--line);
@@ -456,11 +689,16 @@ def inject_theme() -> None:
         }
         .compact-head .kicker {
           color:var(--accent);
+          font-size:clamp(2.35rem,3.1vw,3rem);
+          line-height:1.02;
+          letter-spacing:.01em;
+          text-transform:none;
         }
         .compact-head h2 {
-          margin:.04rem 0 .18rem;
-          font-size:1.55rem;
-          line-height:1.12;
+          margin:.22rem 0 .18rem;
+          color:var(--ink);
+          font-size:clamp(1.35rem,1.8vw,1.7rem);
+          line-height:1.1;
         }
         .compact-head p {
           margin:0;
@@ -546,9 +784,16 @@ def inject_theme() -> None:
           margin:.8rem 0 1rem;
         }
         .section-head h2 {
-          margin:.1rem 0 .25rem;
-          font-size:2.2rem;
-          line-height:1.08;
+          margin:.24rem 0 .25rem;
+          color:var(--ink);
+          font-size:clamp(1.45rem,1.95vw,1.8rem);
+          line-height:1.1;
+        }
+        .section-head .kicker {
+          font-size:clamp(2.55rem,3.35vw,3.25rem);
+          line-height:1.02;
+          letter-spacing:.01em;
+          text-transform:none;
         }
         .section-head p {
           margin:0;
@@ -570,88 +815,173 @@ def inject_theme() -> None:
         .story-card li {
           margin:.35rem 0;
         }
-        .prediction-card {
-          padding:1rem;
+        .live-result {
+          --result-color:var(--green);
+          display:grid;
+          grid-template-columns:minmax(0,1fr) 138px;
+          align-items:center;
+          gap:1rem;
+          border:1px solid rgba(39,132,85,.20);
+          border-left:7px solid var(--result-color);
+          border-radius:10px;
+          padding:1.05rem 1.15rem;
+          background:linear-gradient(135deg, rgba(255,255,255,.98), rgba(238,248,244,.96));
+          box-shadow:0 16px 34px rgba(23,56,72,.09);
         }
-        .result-panel {
-          border-radius:8px;
-          padding:1.25rem 1.45rem;
-          color:white;
-          min-height:206px;
-          background: linear-gradient(135deg, var(--green), var(--teal));
-          box-shadow:0 18px 42px rgba(23,56,72,.13);
+        .live-result.rain {
+          --result-color:var(--blue);
+          border-color:rgba(31,118,210,.22);
+          background:linear-gradient(135deg, rgba(255,255,255,.98), rgba(235,245,253,.96));
         }
-        .result-panel.rain {
-          background: linear-gradient(135deg, var(--blue), var(--teal));
-        }
-        .result-panel .eyebrow {
-          color:rgba(255,255,255,.80);
-          font-size:.74rem;
+        .live-status {
+          display:flex;
+          align-items:center;
+          gap:.45rem;
+          color:var(--muted);
+          font-size:.72rem;
           text-transform:uppercase;
-          letter-spacing:.08em;
+          letter-spacing:.07em;
           font-weight:850;
         }
-        .result-panel .answer {
-          color:white;
-          font-size:clamp(1.9rem, 2.35vw, 2.55rem);
-          line-height:1.08;
-          margin:.32rem 0 .22rem;
-          font-weight:950;
-          text-wrap:balance;
+        .live-dot {
+          width:9px;
+          height:9px;
+          flex:0 0 9px;
+          border-radius:50%;
+          background:var(--result-color);
+          box-shadow:0 0 0 0 color-mix(in srgb, var(--result-color) 38%, transparent);
+          animation:live-pulse 1.8s ease-out infinite;
         }
-        .result-panel .copy {
-          color:rgba(255,255,255,.92);
-          font-weight:760;
-          line-height:1.32;
+        .live-result h3 {
+          color:var(--ink);
+          font-size:clamp(1.65rem,2.2vw,2.25rem);
+          line-height:1.06;
+          margin:.4rem 0 .22rem;
         }
-        .mini-grid {
+        .forecast-line {
+          color:var(--muted);
+          font-weight:720;
+          line-height:1.35;
+        }
+        .forecast-line b { color:var(--ink); }
+        .zone-pill {
+          display:inline-flex;
+          align-items:center;
+          margin-top:.65rem;
+          padding:.25rem .58rem;
+          border-radius:999px;
+          color:var(--ink);
+          background:rgba(0,150,136,.10);
+          font-size:.76rem;
+          font-weight:820;
+        }
+        .probability-ring {
+          --probability:0;
+          width:118px;
+          height:118px;
+          margin:auto;
           display:grid;
-          grid-template-columns:repeat(auto-fit,minmax(148px,1fr));
-          gap:.62rem;
-          margin-top:1rem;
+          place-items:center;
+          border-radius:50%;
+          background:conic-gradient(var(--result-color) calc(var(--probability) * 1%), rgba(23,56,72,.10) 0);
+          position:relative;
         }
-        .mini-grid div {
-          border:1px solid rgba(255,255,255,.35);
-          border-radius:8px;
-          padding:.62rem .68rem;
-          color:white;
-          min-width:0;
+        .probability-ring::after {
+          content:"";
+          position:absolute;
+          inset:10px;
+          border-radius:50%;
+          background:white;
         }
-        .mini-grid span {
+        .probability-ring div {
+          position:relative;
+          z-index:1;
+          text-align:center;
+          color:var(--ink);
+          font-size:1.55rem;
+          line-height:1;
+          font-weight:900;
+        }
+        .probability-ring span {
           display:block;
-          color:rgba(255,255,255,.76);
+          margin-top:.22rem;
+          color:var(--muted);
+          font-size:.66rem;
           text-transform:uppercase;
-          font-size:.7rem;
-          font-weight:850;
+          letter-spacing:.04em;
+          font-weight:800;
         }
-        .feature-snapshot {
+        .weather-summary {
           display:grid;
-          grid-template-columns:repeat(auto-fit,minmax(112px,1fr));
-          gap:.55rem;
-          margin:.7rem 0 .2rem;
+          grid-template-columns:repeat(4,minmax(0,1fr));
+          border-top:1px solid var(--line);
+          border-bottom:1px solid var(--line);
+          margin:.8rem 0 .2rem;
         }
-        .feature-snapshot div {
-          border:1px solid var(--line);
-          background:rgba(255,255,255,.95);
-          border-radius:8px;
-          padding:.65rem .72rem;
-          box-shadow:0 12px 28px rgba(23,56,72,.07);
+        .weather-summary div {
+          min-width:0;
+          padding:.68rem .35rem;
+          text-align:center;
         }
-        .feature-snapshot span {
+        .weather-summary div + div { border-left:1px solid var(--line); }
+        .weather-summary span {
           display:block;
           color:var(--muted);
           font-size:.68rem;
           text-transform:uppercase;
-          letter-spacing:.05em;
-          font-weight:850;
+          letter-spacing:.04em;
+          font-weight:800;
         }
-        .feature-snapshot b {
+        .weather-summary b {
           display:block;
           color:var(--ink);
-          font-size:.98rem;
-          line-height:1.18;
-          margin-top:.22rem;
+          font-size:1.04rem;
+          margin-top:.18rem;
           overflow-wrap:anywhere;
+        }
+        .model-selection-strip {
+          display:grid;
+          grid-template-columns:1.7fr repeat(4,minmax(0,1fr));
+          align-items:stretch;
+          border-top:1px solid var(--line);
+          border-bottom:1px solid var(--line);
+          margin:-.2rem 0 .72rem;
+          background:rgba(255,255,255,.48);
+        }
+        .model-selection-strip > div {
+          min-width:0;
+          padding:.58rem .68rem;
+        }
+        .model-selection-strip > div + div { border-left:1px solid var(--line); }
+        .model-selection-strip span {
+          display:block;
+          color:var(--muted);
+          font-size:.66rem;
+          text-transform:uppercase;
+          letter-spacing:.045em;
+          font-weight:850;
+        }
+        .model-selection-strip b {
+          display:block;
+          color:var(--ink);
+          margin-top:.08rem;
+          font-size:1.16rem;
+          line-height:1.1;
+        }
+        .model-selection-strip small {
+          display:block;
+          color:var(--muted);
+          margin-top:.16rem;
+          font-size:.72rem;
+          line-height:1.24;
+          font-weight:650;
+        }
+        @keyframes live-pulse {
+          70% { box-shadow:0 0 0 9px transparent; }
+          100% { box-shadow:0 0 0 0 transparent; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .live-dot { animation:none; }
         }
         .map-heading {
           display:block;
@@ -1093,7 +1423,14 @@ def inject_theme() -> None:
           padding:.72rem;
           min-height:142px;
           box-shadow:0 12px 28px rgba(23,56,72,.07);
+          transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
         }
+        .ci-step:hover, .ci-step.active {
+          transform:translateY(-4px);
+          border-color:var(--c);
+          box-shadow:0 18px 34px color-mix(in srgb, var(--c) 18%, transparent);
+        }
+        .ci-step.active { background:color-mix(in srgb, var(--c) 7%, white); }
         .ci-step:not(:last-child)::after {
           content:"→";
           position:absolute;
@@ -1145,6 +1482,328 @@ def inject_theme() -> None:
           font-weight:820;
           padding:.28rem .62rem;
         }
+        .ci-status-panel {
+          display:grid;
+          grid-template-columns:auto 1fr auto;
+          gap:1rem;
+          align-items:center;
+          border:1px solid rgba(39,132,85,.24);
+          border-radius:12px;
+          background:
+            radial-gradient(circle at 8% 20%, rgba(39,132,85,.18), transparent 34%),
+            linear-gradient(135deg,#f7fffb 0%,#eef8ff 100%);
+          box-shadow:0 22px 52px rgba(23,56,72,.11);
+          padding:1rem 1.1rem;
+          margin:.8rem 0 1rem;
+        }
+        .ci-status-orb {
+          width:58px;
+          height:58px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          border-radius:50%;
+          color:white;
+          background:linear-gradient(145deg,#36a269,#1f7650);
+          box-shadow:0 12px 24px rgba(39,132,85,.26);
+          font-size:1.7rem;
+          font-weight:950;
+        }
+        .ci-status-copy small {
+          display:block;
+          color:#278455;
+          font-size:.68rem;
+          font-weight:950;
+          letter-spacing:.09em;
+          text-transform:uppercase;
+        }
+        .ci-status-copy b {
+          display:block;
+          color:var(--ink);
+          font-size:1.2rem;
+          margin:.12rem 0;
+        }
+        .ci-status-copy span {
+          color:var(--muted);
+          font-size:.86rem;
+        }
+        .ci-status-facts {
+          display:flex;
+          gap:.55rem;
+        }
+        .ci-status-facts div {
+          min-width:88px;
+          border:1px solid rgba(32,136,255,.16);
+          border-radius:9px;
+          background:rgba(255,255,255,.82);
+          padding:.5rem .65rem;
+          text-align:center;
+        }
+        .ci-status-facts strong {
+          display:block;
+          color:#2088ff;
+          font-size:1.15rem;
+        }
+        .ci-status-facts span {
+          color:var(--muted);
+          font-size:.69rem;
+          font-weight:800;
+          text-transform:uppercase;
+        }
+        .ci-proof-grid {
+          display:grid;
+          grid-template-columns:repeat(3,minmax(0,1fr));
+          gap:.7rem;
+          margin:.8rem 0 1rem;
+        }
+        .ci-proof-card {
+          border:1px solid var(--line);
+          border-left:5px solid var(--c);
+          border-radius:10px;
+          background:white;
+          box-shadow:0 12px 28px rgba(23,56,72,.07);
+          padding:.8rem;
+          transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+        }
+        .ci-proof-card:hover, .ci-proof-card.active {
+          transform:translateY(-3px);
+          border-color:var(--c);
+          box-shadow:0 16px 30px color-mix(in srgb, var(--c) 16%, transparent);
+        }
+        .ci-proof-card.active { background:color-mix(in srgb, var(--c) 6%, white); }
+        .ci-proof-card small {
+          color:var(--c);
+          font-size:.67rem;
+          font-weight:950;
+          letter-spacing:.07em;
+          text-transform:uppercase;
+        }
+        .ci-proof-card b {
+          display:block;
+          color:var(--ink);
+          margin:.2rem 0 .48rem;
+        }
+        .ci-check {
+          display:flex;
+          gap:.42rem;
+          align-items:flex-start;
+          color:var(--muted);
+          font-size:.79rem;
+          line-height:1.3;
+          margin-top:.32rem;
+        }
+        .ci-check i {
+          flex:0 0 18px;
+          height:18px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          border-radius:50%;
+          background:color-mix(in srgb,var(--c) 14%,white);
+          color:var(--c);
+          font-size:.7rem;
+          font-style:normal;
+          font-weight:950;
+        }
+        .dvc-figure, .k8s-figure {
+          position:relative;
+          overflow:hidden;
+          border:1px solid var(--line);
+          border-radius:12px;
+          background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(247,250,252,.96));
+          box-shadow:0 20px 48px rgba(23,56,72,.09);
+          padding:1rem;
+          margin:.8rem 0 1rem;
+        }
+        .dvc-route {
+          display:grid;
+          grid-template-columns:1fr auto 1fr auto 1fr;
+          gap:.6rem;
+          align-items:stretch;
+          margin-bottom:.8rem;
+        }
+        .dvc-stage {
+          border:1px solid var(--line);
+          border-top:5px solid var(--c);
+          border-radius:10px;
+          background:white;
+          padding:.8rem;
+          min-height:118px;
+        }
+        .dvc-stage small, .dvc-asset small, .k8s-command small {
+          display:block;
+          color:var(--c);
+          font-size:.66rem;
+          font-weight:950;
+          letter-spacing:.07em;
+          text-transform:uppercase;
+        }
+        .dvc-stage b, .dvc-asset b, .k8s-command b {
+          display:block;
+          color:var(--ink);
+          margin:.18rem 0;
+        }
+        .dvc-stage span, .dvc-asset span, .k8s-command span {
+          color:var(--muted);
+          font-size:.79rem;
+          line-height:1.3;
+        }
+        .dvc-arrow {
+          align-self:center;
+          color:rgba(148,93,214,.62);
+          font-size:1.6rem;
+          font-weight:950;
+        }
+        .dvc-assets {
+          display:grid;
+          grid-template-columns:repeat(3,minmax(0,1fr));
+          gap:.65rem;
+        }
+        .dvc-asset {
+          border:1px solid rgba(148,93,214,.18);
+          border-left:5px solid var(--c);
+          border-radius:10px;
+          background:#fff;
+          padding:.72rem .78rem;
+          box-shadow:0 10px 24px rgba(23,56,72,.06);
+          transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+        }
+        .dvc-asset:hover, .dvc-asset.active {
+          transform:translateY(-4px);
+          border-color:var(--c);
+          box-shadow:0 17px 32px color-mix(in srgb, var(--c) 18%, transparent);
+        }
+        .dvc-asset.active { background:color-mix(in srgb, var(--c) 7%, white); }
+        .dvc-meta {
+          display:grid;
+          grid-template-columns:auto 1fr;
+          gap:.22rem .5rem;
+          margin-top:.5rem;
+          font-size:.74rem;
+        }
+        .dvc-meta em {
+          color:var(--muted);
+          font-style:normal;
+          font-weight:760;
+        }
+        .dvc-meta code {
+          color:var(--ink);
+          overflow-wrap:anywhere;
+        }
+        .demo-command-row {
+          display:grid;
+          grid-template-columns:repeat(3,minmax(0,1fr));
+          gap:.6rem;
+          margin:.75rem 0 1rem;
+        }
+        .demo-command {
+          border:1px solid var(--line);
+          border-radius:9px;
+          background:#173848;
+          color:white;
+          padding:.72rem .8rem;
+        }
+        .demo-command small {
+          color:#9fd5f3;
+          display:block;
+          font-size:.66rem;
+          font-weight:900;
+          text-transform:uppercase;
+        }
+        .demo-command code {
+          color:white;
+          display:block;
+          font-size:.78rem;
+          margin:.28rem 0;
+          white-space:normal;
+        }
+        .demo-command span {
+          color:#d7e8ef;
+          font-size:.72rem;
+        }
+        .k8s-gateway {
+          border:1px solid rgba(50,108,229,.22);
+          border-radius:10px;
+          background:linear-gradient(135deg,#eef5ff,#f8fbff);
+          padding:.72rem .8rem;
+          text-align:center;
+          margin-bottom:.7rem;
+        }
+        .k8s-gateway small {
+          color:#326ce5;
+          display:block;
+          font-weight:950;
+          letter-spacing:.07em;
+          text-transform:uppercase;
+        }
+        .k8s-gateway b { color:var(--ink); }
+        .k8s-gateway span {
+          color:var(--muted);
+          display:block;
+          font-size:.78rem;
+          margin-top:.2rem;
+        }
+        .k8s-runtime-grid {
+          display:grid;
+          grid-template-columns:repeat(3,minmax(0,1fr));
+          gap:.65rem;
+        }
+        .k8s-lane {
+          border:1px solid var(--line);
+          border-top:5px solid var(--c);
+          border-radius:10px;
+          background:white;
+          padding:.75rem;
+          min-height:128px;
+          transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+        }
+        .k8s-lane:hover, .k8s-lane.active {
+          transform:translateY(-4px);
+          border-color:var(--c);
+          box-shadow:0 17px 32px color-mix(in srgb, var(--c) 18%, transparent);
+        }
+        .k8s-lane.active { background:color-mix(in srgb, var(--c) 7%, white); }
+        .k8s-lane h4 {
+          color:var(--ink);
+          margin:0 0 .38rem;
+          font-size:.94rem;
+          display:flex;
+          align-items:center;
+          gap:.45rem;
+        }
+        .k8s-lane span {
+          display:block;
+          color:var(--muted);
+          font-size:.76rem;
+          line-height:1.32;
+          margin-top:.22rem;
+        }
+        .k8s-lane span::before {
+          content:"•";
+          color:var(--c);
+          font-weight:950;
+          margin-right:.35rem;
+        }
+        .k8s-command-grid {
+          display:grid;
+          grid-template-columns:repeat(4,minmax(0,1fr));
+          gap:.6rem;
+          margin:.75rem 0 1rem;
+        }
+        .k8s-command {
+          border:1px solid var(--line);
+          border-left:5px solid #326ce5;
+          border-radius:9px;
+          background:white;
+          padding:.68rem .72rem;
+        }
+        .k8s-command code {
+          display:block;
+          color:#173848;
+          font-size:.72rem;
+          margin:.36rem 0;
+          overflow-wrap:anywhere;
+        }
         .handoff {
           border:1px solid rgba(31,118,210,.22);
           background:#eef7fb;
@@ -1153,6 +1812,112 @@ def inject_theme() -> None:
           color:var(--ink);
           font-weight:760;
           margin-top:1rem;
+        }
+        [data-testid="stPills"] {
+          margin:.25rem 0 .4rem;
+        }
+        [data-testid="stPills"] button {
+          border-radius:999px !important;
+          border:1px solid rgba(23,56,72,.15) !important;
+          background:rgba(255,255,255,.78) !important;
+          color:var(--ink) !important;
+          font-weight:850 !important;
+          box-shadow:0 7px 18px rgba(23,56,72,.06);
+          transition:transform .16s ease, box-shadow .16s ease, background .16s ease;
+        }
+        [data-testid="stPills"] button:hover {
+          transform:translateY(-2px);
+          box-shadow:0 11px 24px rgba(23,56,72,.11);
+        }
+        [data-testid="stPills"] button[aria-pressed="true"] {
+          background:#173848 !important;
+          color:white !important;
+          border-color:#173848 !important;
+        }
+        section[data-testid="stMain"] [data-testid="stRadio"] div[role="radiogroup"] {
+          display:flex;
+          flex-wrap:wrap;
+          gap:.45rem;
+          margin:.25rem 0 .5rem;
+        }
+        section[data-testid="stMain"] [data-testid="stRadio"] div[role="radiogroup"] label {
+          flex:1 1 150px;
+          justify-content:center;
+          border:1px solid rgba(23,56,72,.15);
+          border-radius:999px;
+          background:rgba(255,255,255,.82);
+          box-shadow:0 7px 18px rgba(23,56,72,.06);
+          padding:.48rem .75rem;
+          min-height:42px;
+          transition:transform .16s ease, box-shadow .16s ease, background .16s ease;
+        }
+        section[data-testid="stMain"] [data-testid="stRadio"] div[role="radiogroup"] label:hover {
+          transform:translateY(-2px);
+          box-shadow:0 11px 24px rgba(23,56,72,.11);
+        }
+        section[data-testid="stMain"] [data-testid="stRadio"] div[role="radiogroup"] label > div:first-child {
+          display:none;
+        }
+        section[data-testid="stMain"] [data-testid="stRadio"] div[role="radiogroup"] label p {
+          color:var(--ink);
+          font-weight:850;
+          margin:0;
+          text-align:center;
+        }
+        section[data-testid="stMain"] [data-testid="stRadio"] div[role="radiogroup"] label:has(input:checked) {
+          background:#173848;
+          border-color:#173848;
+        }
+        section[data-testid="stMain"] [data-testid="stRadio"] div[role="radiogroup"] label:has(input:checked) p {
+          color:white;
+        }
+        .visual-stage {
+          position:relative;
+          width:100%;
+          margin:.2rem 0 .7rem;
+          overflow:hidden;
+          border-radius:26px;
+          background:
+            radial-gradient(circle at 14% 16%,rgba(31,118,210,.11),transparent 27%),
+            radial-gradient(circle at 86% 24%,rgba(148,93,214,.1),transparent 30%),
+            linear-gradient(150deg,#fbfdff 0%,#f3f8fa 58%,#fbfaf6 100%);
+          box-shadow:0 22px 56px rgba(23,56,72,.1);
+        }
+        .visual-stage svg {
+          display:block;
+          width:100%;
+          height:auto;
+          min-height:430px;
+        }
+        .visual-stage .flow-dash {
+          stroke-dasharray:12 10;
+          animation:flowdash 2.2s linear infinite;
+        }
+        .visual-stage .pulse {
+          transform-box:fill-box;
+          transform-origin:center;
+          animation:visualpulse 2.4s ease-in-out infinite;
+        }
+        @keyframes flowdash { to { stroke-dashoffset:-44; } }
+        @keyframes visualpulse {
+          0%,100% { transform:scale(1); opacity:.92; }
+          50% { transform:scale(1.08); opacity:1; }
+        }
+        .visual-stage text {
+          font-family:"Segoe UI",Arial,sans-serif;
+        }
+        .visual-stage .svg-label {
+          fill:#173848;
+          font-weight:850;
+        }
+        .visual-stage .svg-muted {
+          fill:#667b85;
+          font-weight:650;
+        }
+        .visual-stage .svg-kicker {
+          font-weight:900;
+          letter-spacing:1.6px;
+          text-transform:uppercase;
         }
         .rank-strip {
           display:flex;
@@ -1280,8 +2045,14 @@ def inject_theme() -> None:
           .demo-grid { grid-template-columns:1fr; }
           .detail-grid { grid-template-columns:1fr; }
           .monitor-meter { grid-template-columns:1fr 1fr; }
-          .mini-grid { grid-template-columns:1fr; }
-          .feature-snapshot { grid-template-columns:1fr 1fr; }
+          .live-result { grid-template-columns:minmax(0,1fr) 116px; }
+          .probability-ring { width:104px; height:104px; }
+          .weather-summary { grid-template-columns:1fr 1fr; }
+          .weather-summary div:nth-child(3) { border-left:none; border-top:1px solid var(--line); }
+          .weather-summary div:nth-child(4) { border-top:1px solid var(--line); }
+          .model-selection-strip { grid-template-columns:1.4fr repeat(2,minmax(0,1fr)); }
+          .model-selection-strip > div:nth-child(4) { border-left:none; border-top:1px solid var(--line); }
+          .model-selection-strip > div:nth-child(5) { border-top:1px solid var(--line); }
           .pipeline-rail { flex-direction:column; }
           .pipe-arrow { transform:rotate(90deg); }
           .pipeline-node { min-height:auto; }
@@ -1295,6 +2066,11 @@ def inject_theme() -> None:
           .blueprint-lane { min-height:auto; }
           .ci-track { grid-template-columns:1fr; }
           .ci-step:not(:last-child)::after { display:none; }
+          .ci-status-panel { grid-template-columns:auto 1fr; }
+          .ci-status-facts { grid-column:1 / -1; }
+          .ci-proof-grid, .dvc-assets, .demo-command-row, .k8s-runtime-grid, .k8s-command-grid { grid-template-columns:1fr; }
+          .dvc-route { grid-template-columns:1fr; }
+          .dvc-arrow { transform:rotate(90deg); text-align:center; }
         }
         </style>
         """
@@ -1408,6 +2184,21 @@ def hero() -> None:
     )
 
 
+def normalize_rainfall_zone(value: object) -> str:
+    labels = {
+        "arid": "Arid",
+        "summer": "Summer",
+        "summer dominant": "Summer dominant",
+        "uniform": "Uniform",
+        "winter": "Winter",
+        "winter dominant": "Winter dominant",
+    }
+    if value is None or pd.isna(value):
+        return "Unknown"
+    normalized = re.sub(r"\s+", " ", str(value).strip()).casefold()
+    return labels.get(normalized, "Unknown")
+
+
 def sample_observation_date(sample: dict) -> date:
     try:
         return date(int(sample.get("year", 2015)), int(sample.get("month", 12)), int(sample.get("day", 4)))
@@ -1510,10 +2301,12 @@ def update_payload(
         "rainfall_zone_Winter dominant",
     ]:
         payload[zone_col] = 0
-    zone = str(location_row.get("rainfall_zone", ""))
+    zone = normalize_rainfall_zone(location_row.get("rainfall_zone"))
     matching_col = f"rainfall_zone_{zone}"
     if matching_col in payload:
         payload[matching_col] = 1
+    # Arid is the reference category used during one-hot encoding, so all five
+    # explicit rainfall-zone columns correctly remain zero for Arid stations.
 
     return payload
 
@@ -1782,7 +2575,7 @@ def prediction_map(frame: pd.DataFrame, selected_location: str, threshold: float
         )
     )
     fig.update_layout(
-        height=500,
+        height=340,
         margin={"l": 0, "r": 0, "t": 4, "b": 0},
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#dceef6",
@@ -1803,7 +2596,7 @@ def prediction_map(frame: pd.DataFrame, selected_location: str, threshold: float
         ],
     )
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-    html("<div class='caption'>Map shows all supported WeatherAUS station locations. The selected station is highlighted.</div>")
+    html("<div class='caption'>Star = selected station · colour = predicted rain probability.</div>")
 
 
 def prediction_result_panel(
@@ -1812,21 +2605,29 @@ def prediction_result_panel(
     threshold: float,
     scenario: pd.DataFrame,
     error: str | None,
+    max_temp: float,
+    humidity_3pm: float,
+    pressure_3pm: float,
+    wind_gust_speed: float,
 ) -> None:
     prediction_date = observation_date + timedelta(days=1)
     selected = scenario.loc[scenario["location"] == selected_location] if not scenario.empty else pd.DataFrame()
+    zone = (
+        normalize_rainfall_zone(selected.iloc[0].get("rainfall_zone"))
+        if not selected.empty
+        else "Unknown"
+    )
     if error or selected.empty or pd.isna(selected.iloc[0].get("probability")):
         html(
             f"""
-            <div class="result-panel">
-              <div class="eyebrow">Prediction date</div>
-              <div class="answer">{escape(fmt_date(prediction_date))}</div>
-              <div class="copy">Model scoring runtime unavailable.</div>
-              <div class="mini-grid">
-                <div><span>Station</span>{escape(selected_location)}</div>
-                <div><span>Observed on</span>{escape(fmt_date(observation_date))}</div>
-                <div><span>Threshold</span>{threshold * 100:.0f}%</div>
+            <div class="live-result">
+              <div>
+                <div class="live-status"><span class="live-dot"></span>Live model score unavailable</div>
+                <h3>Forecast not available</h3>
+                <div class="forecast-line">Forecast for <b>{escape(fmt_date(prediction_date))}</b></div>
+                <div class="zone-pill">Rainfall zone · {escape(zone)}</div>
               </div>
+              <div class="probability-ring" style="--probability:0"><div>—<span>Probability</span></div></div>
             </div>
             """
         )
@@ -1838,105 +2639,25 @@ def prediction_result_panel(
     css_class = "rain" if is_rain else ""
     html(
         f"""
-        <div class="result-panel {css_class}">
-          <div class="eyebrow">Prediction for {escape(selected_location)}</div>
-          <div class="answer">{escape(label)}</div>
-          <div class="copy">Exact prediction date: {escape(fmt_date(prediction_date))}</div>
-          <div class="mini-grid">
-            <div><span>Rain probability</span>{probability * 100:.1f}%</div>
-            <div><span>Decision threshold</span>{threshold * 100:.0f}%</div>
-            <div><span>Observed on</span>{escape(fmt_date(observation_date))}</div>
+        <div class="live-result {css_class}">
+          <div>
+            <div class="live-status"><span class="live-dot"></span>Live score · {escape(selected_location)}</div>
+            <h3>{escape(label)}</h3>
+            <div class="forecast-line">Forecast for <b>{escape(fmt_date(prediction_date))}</b> · threshold {threshold * 100:.0f}%</div>
+            <div class="zone-pill">Rainfall zone · {escape(zone)}</div>
           </div>
+          <div class="probability-ring" style="--probability:{probability * 100:.1f}">
+            <div>{probability * 100:.1f}%<span>Probability</span></div>
+          </div>
+        </div>
+        <div class="weather-summary">
+          <div><span>Max temp</span><b>{max_temp:.1f} °C</b></div>
+          <div><span>3pm humidity</span><b>{humidity_3pm:.0f}%</b></div>
+          <div><span>3pm pressure</span><b>{pressure_3pm:.0f} hPa</b></div>
+          <div><span>Wind gust</span><b>{wind_gust_speed:.0f} km/h</b></div>
         </div>
         """
     )
-
-
-def probability_gauge(probability: float, threshold: float) -> None:
-    fig = go.Figure(
-        go.Indicator(
-            mode="gauge+number",
-            value=probability * 100.0,
-            number={"suffix": "%", "font": {"size": 30, "color": "#173848"}},
-            gauge={
-                "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": "#5b6e76"},
-                "bar": {"color": "#1f76d2" if probability >= threshold else "#278455", "thickness": 0.28},
-                "bgcolor": "rgba(0,0,0,0)",
-                "borderwidth": 0,
-                "steps": [
-                    {"range": [0, threshold * 100.0], "color": "rgba(39,132,85,.14)"},
-                    {"range": [threshold * 100.0, 100], "color": "rgba(31,118,210,.16)"},
-                ],
-                "threshold": {
-                    "line": {"color": "#c9473a", "width": 3},
-                    "thickness": 0.85,
-                    "value": threshold * 100.0,
-                },
-            },
-        )
-    )
-    fig.update_layout(
-        height=170,
-        margin={"l": 18, "r": 18, "t": 12, "b": 4},
-        paper_bgcolor="rgba(0,0,0,0)",
-        font={"family": "Segoe UI, sans-serif"},
-    )
-    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-    html("<div class='caption'>Model probability against the saved 58% decision threshold (red line).</div>")
-
-
-def season_name(month: int) -> str:
-    if month in {12, 1, 2}:
-        return "Summer"
-    if month in {3, 4, 5}:
-        return "Autumn"
-    if month in {6, 7, 8}:
-        return "Winter"
-    return "Spring"
-
-
-def feature_snapshot_panel(
-    selected_location: str,
-    observation_date: date,
-    rain_today: str,
-    scenario: pd.DataFrame,
-) -> None:
-    selected = scenario.loc[scenario["location"] == selected_location] if not scenario.empty else pd.DataFrame()
-    zone = str(selected.iloc[0].get("rainfall_zone", "Unknown")) if not selected.empty else "Unknown"
-    items = [
-        ("Station", selected_location),
-        ("Season", season_name(observation_date.month)),
-        ("Rainfall zone", zone),
-        ("Rain today", rain_today),
-    ]
-    blocks = ["<div class='feature-snapshot'>"]
-    for label, value in items:
-        blocks.append(f"<div><span>{escape(label)}</span><b>{escape(value)}</b></div>")
-    blocks.append("</div>")
-    html("".join(blocks))
-
-
-def observation_snapshot_panel(sample: dict, rain_today: str) -> None:
-    def number(key: str, fallback: float) -> float:
-        try:
-            return float(sample.get(key, fallback))
-        except (TypeError, ValueError):
-            return fallback
-
-    items = [
-        ("Temperature", f"{number('min_temp', 10.1):.1f} to {number('max_temp', 20.1):.1f} °C"),
-        ("Rainfall", f"{number('rainfall', 0.0):.1f} mm"),
-        ("Humidity", f"{number('humidity_9am', 53.0):.0f}% / {number('humidity_3pm', 61.0):.0f}%"),
-        ("Pressure", f"{number('pressure_9am', 1023.4):.1f} / {number('pressure_3pm', 1022.0):.1f} hPa"),
-        ("Wind gust", f"{number('wind_gust_speed', 41.0):.0f} km/h"),
-        ("Cloud", f"{number('cloud_3pm', 6.0):.0f} oktas"),
-    ]
-    blocks = ["<div class='feature-snapshot'>"]
-    for label, value in items:
-        blocks.append(f"<div><span>{escape(label)}</span><b>{escape(value)}</b></div>")
-    blocks.append("</div>")
-    html("<div class='caption' style='margin-top:.65rem'>Saved observation used for this prediction example.</div>")
-    html("".join(blocks))
 
 
 def prediction_studio() -> None:
@@ -1949,7 +2670,7 @@ def prediction_studio() -> None:
     location_names = locations["location"].tolist()
     default_location = sample.get("location", "Hobart")
     default_index = location_names.index(default_location) if default_location in location_names else 0
-    default_date = sample_observation_date(sample)
+    default_date = date.today()
 
     def sample_float(key: str, fallback: float) -> float:
         try:
@@ -1958,68 +2679,140 @@ def prediction_studio() -> None:
             return fallback
 
     compact_header(
-        "Live prediction",
-        "Exact next-day forecast example",
-        "The scenario combines station context, weather observations, model probability, decision threshold, and geographic coverage in one view.",
+        "Data science + prediction",
+        "Tomorrow's rain, scored live",
+        "A station-aware CatBoost model turns today's weather into a next-day rain probability and decision.",
         "#009688",
     )
+    html(
+        f"""
+        <div class="model-selection-strip">
+          <div>
+            <span>Deployment winner</span>
+            <b>CatBoost</b>
+            <small>Mixed inputs · station effects · nonlinear weather patterns · missing values</small>
+          </div>
+          <div><span>ROC AUC</span><b>{fmt_pct(METRICS.get('roc_auc'))}</b><small>ranking quality</small></div>
+          <div><span>Accuracy</span><b>{fmt_pct(METRICS.get('accuracy'))}</b><small>correct decisions</small></div>
+          <div><span>F1 score</span><b>{fmt_pct(METRICS.get('f1'))}</b><small>precision–recall balance</small></div>
+          <div><span>Recall</span><b>{fmt_pct(METRICS.get('recall'))}</b><small>rain events detected</small></div>
+        </div>
+        """
+    )
+
+    control_a, control_b, control_c, control_d = st.columns(4)
+    with control_a:
+        selected_location = st.selectbox("Station", location_names, index=default_index)
+    with control_b:
+        observation_date = st.date_input("Observation date", value=default_date)
+    with control_c:
+        max_temp = float(
+            st.number_input(
+                "Maximum temperature (°C)",
+                min_value=-10.0,
+                max_value=55.0,
+                value=sample_float("max_temp", 25.0),
+                step=0.5,
+            )
+        )
+    with control_d:
+        rainfall = float(
+            st.number_input(
+                "Rainfall today (mm)",
+                min_value=0.0,
+                max_value=400.0,
+                value=sample_float("rainfall", 0.0),
+                step=0.5,
+            )
+        )
+
+    weather_a, weather_b, weather_c, weather_d = st.columns(4)
+    with weather_a:
+        humidity_3pm = float(
+            st.number_input(
+                "3pm humidity (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=sample_float("humidity_3pm", 61.0),
+                step=1.0,
+            )
+        )
+    with weather_b:
+        pressure_3pm = float(
+            st.number_input(
+                "3pm pressure (hPa)",
+                min_value=950.0,
+                max_value=1060.0,
+                value=sample_float("pressure_3pm", 1022.0),
+                step=0.5,
+            )
+        )
+    with weather_c:
+        wind_gust_speed = float(
+            st.number_input(
+                "Wind gust (km/h)",
+                min_value=0.0,
+                max_value=250.0,
+                value=sample_float("wind_gust_speed", 41.0),
+                step=1.0,
+            )
+        )
+    with weather_d:
+        cloud_3pm = float(
+            st.number_input(
+                "3pm cloud (oktas)",
+                min_value=0.0,
+                max_value=8.0,
+                value=min(8.0, max(0.0, sample_float("cloud_3pm", 6.0))),
+                step=1.0,
+            )
+        )
+
+    if not isinstance(observation_date, date):
+        observation_date = default_date
+    min_temp = min(sample_float("min_temp", 10.1), max_temp)
+    humidity_9am = sample_float("humidity_9am", 53.0)
+    pressure_9am = sample_float("pressure_9am", pressure_3pm + 1.4)
+    rain_today = "Yes" if rainfall >= 1.0 else "No"
+    scenario, _selected_payload, threshold, error = build_prediction_scenario(
+        selected_location,
+        observation_date,
+        min_temp,
+        max_temp,
+        rainfall,
+        humidity_9am,
+        humidity_3pm,
+        pressure_9am,
+        pressure_3pm,
+        wind_gust_speed,
+        cloud_3pm,
+        rain_today,
+    )
+
     details_col, map_col = st.columns([0.42, 0.58], gap="large")
     with details_col:
-        head_a, head_b = st.columns(2)
-        with head_a:
-            selected_location = st.selectbox("Station", location_names, index=default_index)
-        with head_b:
-            observation_date = st.date_input("Observation date", value=default_date)
-        if not isinstance(observation_date, date):
-            observation_date = default_date
-        min_temp = sample_float("min_temp", 10.1)
-        max_temp = sample_float("max_temp", 20.1)
-        rainfall = sample_float("rainfall", 0.0)
-        humidity_9am = sample_float("humidity_9am", 53.0)
-        humidity_3pm = sample_float("humidity_3pm", 61.0)
-        pressure_3pm = sample_float("pressure_3pm", 1022.0)
-        pressure_9am = sample_float("pressure_9am", pressure_3pm + 1.4)
-        wind_gust_speed = sample_float("wind_gust_speed", 41.0)
-        cloud_3pm = sample_float("cloud_3pm", 6.0)
-        rain_today = "Yes" if sample_float("rain_today", 0.0) > 0 else "No"
-        scenario, _selected_payload, threshold, error = build_prediction_scenario(
+        prediction_result_panel(
             selected_location,
             observation_date,
-            min_temp,
+            threshold,
+            scenario,
+            error,
             max_temp,
-            rainfall,
-            humidity_9am,
             humidity_3pm,
-            pressure_9am,
             pressure_3pm,
             wind_gust_speed,
-            cloud_3pm,
-            rain_today,
         )
-        prediction_result_panel(selected_location, observation_date, threshold, scenario, error)
-        selected = scenario.loc[scenario["location"] == selected_location] if not scenario.empty else pd.DataFrame()
-        if not selected.empty and pd.notna(selected.iloc[0].get("probability")):
-            probability_gauge(float(selected.iloc[0]["probability"]), threshold)
-        feature_snapshot_panel(selected_location, observation_date, rain_today, scenario)
-        observation_snapshot_panel(sample, rain_today)
 
     with map_col:
         html(
             f"""
             <div class="map-heading">
-              <b>Live station map</b>
-              <span>Selected station: {escape(selected_location)} · forecast for {escape(fmt_date(observation_date + timedelta(days=1)))}</span>
+              <b>Australia forecast map</b>
+              <span>{escape(selected_location)} · {escape(fmt_date(observation_date + timedelta(days=1)))}</span>
             </div>
             """
         )
         prediction_map(scenario, selected_location, threshold, error)
-        if not scenario.empty and scenario["probability"].notna().any():
-            ranked = scenario.sort_values("probability", ascending=False).head(5)
-            rows = "".join(
-                f"<div><span>{escape(str(row.location))}</span>{row.probability * 100:.1f}%</div>"
-                for row in ranked.itertuples()
-            )
-            html(f"<div class='rank-strip'><b>Highest rain probability under this scenario</b>{rows}</div>")
 
 
 def image_with_caption(path: Path, caption: str) -> None:
@@ -2203,90 +2996,186 @@ def structure_flow_figure(active_key: str) -> None:
 
 
 def structure_blueprint_figure(active_key: str) -> None:
-    lanes = [
+    layers = [
         {
-            "title": "Data foundation",
-            "tool": ("Pandas", "#150458", "pd"),
+            "key": "data",
+            "label": "Data + features",
+            "folder": "data/ · src/data/ · src/features/",
             "color": "#1f76d2",
-            "items": [
-                ("data", "Weather rows", "Date + Location upsert", "Pandas", "#150458", "pd"),
-                ("features", "Feature contract", f"{FEATURE_COUNT} ordered features", "Python", "#3776ab", "Py"),
-            ],
+            "title": "Reproducible inputs",
+            "line1": "Raw data and feature code stay together.",
+            "line2": f"One {FEATURE_COUNT}-feature contract reaches serving.",
+            "paths": ["data/raw/", "src/data/", "src/features/"],
         },
         {
-            "title": "Training package",
-            "tool": ("CatBoost", "#c99700", "CB"),
+            "key": "model",
+            "label": "Model package",
+            "folder": "models/ · src/models/",
             "color": "#c99522",
-            "items": [
-                ("model", "Winner model", "CatBoost artifact + metadata", "CatBoost", "#c99700", "CB"),
-                ("lineage", "Artifact lineage", "DVC pointers + DagsHub remote", "DVC", "#945dd6", "DVC"),
-                ("model", "Experiment record", "metrics and model package in MLflow", "MLflow", "#0194e2", "ML"),
-            ],
+            "title": "One deployable winner",
+            "line1": "Model and metadata move together.",
+            "line2": "Serving reads one versioned package.",
+            "paths": ["src/models/", "models/final_winner/", "model + metadata + threshold"],
         },
         {
-            "title": "Production loop",
-            "tool": ("Kubernetes", "#326ce5", "K8s"),
+            "key": "automation",
+            "label": "Automation",
+            "folder": "airflow/dags/ · src/versioning/",
+            "color": "#017cee",
+            "title": "Scheduled execution",
+            "line1": "DAGs schedule; modules do the work.",
+            "line2": "Orchestration stays separate from logic.",
+            "paths": ["airflow/dags/", "src/versioning/", "scheduled workflows"],
+        },
+        {
+            "key": "monitoring",
+            "label": "Monitoring",
+            "folder": "src/monitoring/ · deployment/",
+            "color": "#e31b23",
+            "title": "Operational evidence",
+            "line1": "Drift and performance share one path.",
+            "line2": "Runtime signals flow to Grafana.",
+            "paths": ["src/monitoring/", "src/model_monitoring/", "Grafana dashboards"],
+        },
+        {
+            "key": "runtime",
+            "label": "Runtime",
+            "folder": "docker/ · kubernetes/",
             "color": "#326ce5",
-            "items": [
-                ("automation", "Airflow schedules", "ingest, train, version, drift", "Airflow", "#017cee", "AF"),
-                ("runtime", "Serving runtime", "FastAPI on Kubernetes", "FastAPI", "#009688", "FA"),
-                ("automation", "Monitoring feedback", "Evidently metrics to Pushgateway", "Evidently", "#e31b23", "EV"),
-            ],
+            "title": "Portable services",
+            "line1": "Docker defines; Kubernetes operates.",
+            "line2": "Services remain independently managed.",
+            "paths": ["docker/", "kubernetes/", "service manifests"],
         },
     ]
-    blocks = ["<div class='blueprint-figure'><div class='blueprint-grid'>"]
-    for lane in lanes:
-        tool_name, tool_color, tool_mark = lane["tool"]
+    current = next(layer for layer in layers if layer["key"] == active_key)
+
+    def layer_icon(key: str, x: int, y: int) -> str:
+        common = "fill='none' stroke='white' stroke-width='4.8' stroke-linecap='round' stroke-linejoin='round'"
+        icons = {
+            "data": (
+                f"<g transform='translate({x} {y})' {common}>"
+                "<ellipse cy='-13' rx='17' ry='6'/><path d='M-17-13v25c0 4 8 7 17 7s17-3 17-7v-25M-17-1c0 4 8 7 17 7s17-3 17-7'/></g>"
+            ),
+            "model": (
+                f"<g transform='translate({x} {y})' {common}>"
+                "<path d='M0-20l19 10v21L0 21-19 11v-21zM-19-10L0 1l19-11M0 1v20'/></g>"
+            ),
+            "automation": (
+                f"<g transform='translate({x} {y})' {common}>"
+                "<circle r='19'/><path d='M0-11V1l9 6M-5-25h10'/></g>"
+            ),
+            "monitoring": (
+                f"<g transform='translate({x} {y})' {common}>"
+                "<path d='M-20 14h40M-18 8l8-10 8 6 10-15 11 7'/><circle cx='-10' cy='-2' r='2' fill='white' stroke='none'/><circle cx='8' cy='-11' r='2' fill='white' stroke='none'/></g>"
+            ),
+            "runtime": (
+                f"<g transform='translate({x} {y})' {common}>"
+                "<rect x='-19' y='-18' width='38' height='14' rx='3'/><rect x='-19' y='4' width='38' height='14' rx='3'/><path d='M-11-11h.1M-11 11h.1'/></g>"
+            ),
+        }
+        return icons[key]
+
+    y_positions = [116, 216, 316, 416, 516]
+    active_y = y_positions[[layer["key"] for layer in layers].index(active_key)]
+    blocks = [
+        "<div class='visual-stage'><svg viewBox='0 0 1200 660' role='img' aria-label='Repository structure organized by responsibility'>",
+        "<defs><linearGradient id='treeBg' x1='0' y1='0' x2='1' y2='1'><stop stop-color='#ffffff'/><stop offset='1' stop-color='#edf5f7'/></linearGradient>"
+        "<linearGradient id='repoCore' x1='0' y1='0' x2='1' y2='1'><stop stop-color='#173848'/><stop offset='1' stop-color='#285f68'/></linearGradient>"
+        "<filter id='treeShadow'><feDropShadow dx='0' dy='9' stdDeviation='10' flood-color='#173848' flood-opacity='.13'/></filter>"
+        "<marker id='treeArrow' viewBox='0 0 10 10' refX='8' refY='5' markerWidth='7' markerHeight='7' orient='auto'><path d='M0 0l10 5-10 5z' fill='#637983'/></marker></defs>",
+        "<rect x='28' y='28' width='1144' height='604' rx='34' fill='url(#treeBg)'/>",
+        "<path d='M292 116v400M292 116h34M292 216h34M292 316h34M292 416h34M292 516h34' fill='none' stroke='#9cafb6' stroke-width='5' stroke-linecap='round'/>",
+        f"<path d='M690 {active_y}C730 {active_y} 724 166 770 166' fill='none' stroke='{escape(current['color'])}' stroke-width='7' stroke-linecap='round' marker-end='url(#treeArrow)' class='flow-dash'/>",
+        "<g filter='url(#treeShadow)'><rect x='60' y='225' width='210' height='220' rx='30' fill='white' stroke='#d7e1e7'/><rect x='60' y='225' width='210' height='10' rx='5' fill='#173848'/>"
+        "<rect x='111' y='263' width='108' height='94' rx='26' fill='url(#repoCore)'/><path d='M135 288h24l10 10h28v34h-62z' fill='none' stroke='white' stroke-width='7' stroke-linejoin='round'/>"
+        "<text x='165' y='389' text-anchor='middle' class='svg-kicker' fill='#173848' font-size='13'>REPOSITORY</text><text x='165' y='419' text-anchor='middle' class='svg-label' font-size='17'>rain_prediction_mlops</text></g>",
+    ]
+    for layer, y in zip(layers, y_positions):
+        active = layer["key"] == active_key
+        opacity = "1" if active else ".42"
+        stroke_width = "3" if active else "1"
         blocks.append(
-            f"<div class='blueprint-lane' style='--c:{escape(lane['color'])}'>"
-            f"<h3>{logo_badge(tool_name, tool_color, tool_mark)}{escape(lane['title'])}</h3>"
-            "<div class='blueprint-items'>"
+            f"<g opacity='{opacity}' filter='url(#treeShadow)'><rect x='326' y='{y-39}' width='364' height='78' rx='23' fill='white' stroke='{escape(layer['color'])}' stroke-width='{stroke_width}'/>"
+            f"<circle cx='374' cy='{y}' r='31' fill='{escape(layer['color'])}'/>"
+            f"{layer_icon(layer['key'], 374, y)}"
+            f"<text x='420' y='{y-6}' class='svg-label' font-size='20'>{escape(layer['label'])}</text>"
+            f"<text x='420' y='{y+20}' class='svg-muted' font-size='14'>{escape(layer['folder'])}</text></g>"
         )
-        for key, title, body, logo_name, color, mark in lane["items"]:
-            active = " active" if key == active_key else ""
-            blocks.append(
-                f"<div class='blueprint-pill{active}' style='--c:{escape(color)}'>"
-                f"{logo_badge(logo_name, color, mark)}"
-                f"<div><b>{escape(title)}</b><span>{escape(body)}</span></div>"
-                "</div>"
-            )
-        blocks.append("</div></div>")
-    blocks.append("</div></div>")
-    html("".join(blocks))
+    blocks.extend([
+        f"<g filter='url(#treeShadow)'><rect x='770' y='105' width='375' height='450' rx='32' fill='white' stroke='{escape(current['color'])}' stroke-width='2'/><rect x='770' y='105' width='10' height='450' rx='5' fill='{escape(current['color'])}'/>"
+        f"<circle cx='835' cy='171' r='39' fill='{escape(current['color'])}'/>{layer_icon(current['key'], 835, 171)}"
+        f"<text x='895' y='158' class='svg-kicker' fill='{escape(current['color'])}' font-size='13'>{escape(current['label'])}</text>"
+        f"<text x='895' y='193' class='svg-label' font-size='25'>{escape(current['title'])}</text>"
+        "<path d='M810 226h295' stroke='#d7e1e7' stroke-width='2'/>"
+        f"<text x='810' y='268' class='svg-muted' font-size='15'>{escape(current['line1'])}</text>"
+        f"<text x='810' y='296' class='svg-muted' font-size='15'>{escape(current['line2'])}</text>"
+        "<text x='810' y='344' class='svg-kicker' fill='#637983' font-size='12'>OWNED PATHS</text>",
+    ])
+    for index, path in enumerate(current["paths"]):
+        blocks.append(
+            f"<rect x='810' y='{366 + index * 48}' width='295' height='36' rx='18' fill='{escape(current['color'])}' fill-opacity='.09'/>"
+            f"<circle cx='830' cy='{384 + index * 48}' r='5' fill='{escape(current['color'])}'/>"
+            f"<text x='845' y='{389 + index * 48}' class='svg-label' font-size='14'>{escape(path)}</text>"
+        )
+    blocks.append("</g></svg></div>")
+    visual("".join(blocks))
 
 
 def monitoring_loop_figure(items: list[dict], active_key: str) -> None:
     positions = {
-        "ingestion": "loop-ingestion",
-        "versioning": "loop-versioning",
-        "performance": "loop-performance",
-        "e2e": "loop-e2e",
-        "drift": "loop-drift",
+        "ingestion": (600, 135),
+        "versioning": (848, 260),
+        "performance": (800, 500),
+        "e2e": (400, 500),
+        "drift": (352, 260),
     }
-    blocks = ["<div class='loop-figure'>"]
-    blocks.append(
-        "<div class='loop-core'><b>Model package</b>"
-        "<span>raw data, DVC state, MLflow run, reference dataset, API validation</span></div>"
-    )
+    active = next(item for item in items if item["key"] == active_key)
+
+    def monitor_icon(key: str, x: int, y: int) -> str:
+        logo_name = {
+            "ingestion": "Pandas",
+            "versioning": "DVC",
+            "performance": "Grafana",
+            "e2e": "CatBoost",
+            "drift": "Evidently",
+        }[key]
+        return (
+            f"<circle cx='{x}' cy='{y}' r='19' fill='white' fill-opacity='.96'/>"
+            f"<image x='{x-14}' y='{y-14}' width='28' height='28' href='{TOOL_LOGOS[logo_name]}'/>"
+        )
+
+    blocks = [
+        "<div class='visual-stage'><svg viewBox='0 0 1200 700' role='img' aria-label='Daily Airflow monitoring and retraining cycle'>",
+        "<defs><filter id='monitorShadow'><feDropShadow dx='0' dy='10' stdDeviation='11' flood-color='#173848' flood-opacity='.15'/></filter>"
+        "<marker id='monitorArrow' viewBox='0 0 10 10' refX='8' refY='5' markerWidth='7' markerHeight='7' orient='auto'><path d='M0 0l10 5-10 5z' fill='#637983'/></marker></defs>",
+        "<rect x='28' y='28' width='1144' height='644' rx='34' fill='#ffffff' fill-opacity='.62'/>",
+        "<path d='M600 135C790 135 920 260 895 415C875 550 745 600 600 565C455 600 325 550 305 415C280 260 410 135 600 135' fill='none' stroke='#80939b' stroke-width='7' stroke-linecap='round' marker-end='url(#monitorArrow)' class='flow-dash' opacity='.52'/>",
+        "<g transform='translate(600 345)' filter='url(#monitorShadow)'><circle r='116' fill='#173848'/><path d='M-50-25h100v50h-100zM-31-46h62v21' fill='none' stroke='white' stroke-width='8' stroke-linejoin='round'/><text x='0' y='58' text-anchor='middle' fill='white' font-size='24' font-weight='900'>Model package</text><text x='0' y='84' text-anchor='middle' fill='#cfe0e7' font-size='15'>data · model · reference · threshold</text></g>",
+        "<path d='M510 307l-78-38M690 307l102-42M685 415l82 67M515 415l-82 67' stroke='#80939b' stroke-width='4' stroke-linecap='round' opacity='.34'/>",
+    ]
+    for item in items:
+        x, y = positions[item["key"]]
+        is_active = item["key"] == active_key
+        opacity = "1" if is_active else ".34"
+        radius = 74 if is_active else 58
+        blocks.append(
+            f"<g opacity='{opacity}' filter='url(#monitorShadow)'><circle cx='{x}' cy='{y}' r='{radius}' fill='{escape(item['color'])}'/>"
+            f"<text x='{x}' y='{y-30}' text-anchor='middle' fill='white' font-size='15' font-weight='900'>{escape(item['schedule'])}</text>"
+            f"{monitor_icon(item['key'], x, y-5)}"
+            f"<text x='{x}' y='{y+24}' text-anchor='middle' fill='white' font-size='16' font-weight='900'>{escape(item['label'])}</text>"
+            f"<text x='{x}' y='{y+43}' text-anchor='middle' fill='white' fill-opacity='.88' font-size='11'>{escape(item['purpose'])}</text></g>"
+        )
     blocks.extend(
         [
-            "<div class='loop-arrow a1'>→</div>",
-            "<div class='loop-arrow a2'>↓</div>",
-            "<div class='loop-arrow a3'>←</div>",
-            "<div class='loop-arrow a4'>↑</div>",
+            f"<circle cx='94' cy='617' r='9' fill='{escape(active['color'])}'/>",
+            f"<text x='118' y='611' class='svg-kicker' fill='{escape(active['color'])}' font-size='14'>{escape(active['schedule'])} · {escape(active['label'])}</text>",
+            f"<text x='118' y='642' class='svg-label' font-size='20'>{escape(active['title'])}</text>",
+            f"<text x='118' y='668' class='svg-muted' font-size='15'>{escape(active['artifacts'][0])} · {escape(active['artifacts'][1])}</text>",
+            "</svg></div>",
         ]
     )
-    for item in items:
-        active = " active" if item["key"] == active_key else ""
-        blocks.append(
-            f"<div class='loop-node {positions[item['key']]}{active}' style='--c:{escape(item['color'])}'>"
-            f"<small>{escape(item['schedule'])} · {escape(item['kicker'])}</small>"
-            f"<b>{escape(item['label'])}</b>"
-            f"<span>{escape(item['purpose'])}</span>"
-            "</div>"
-        )
-    blocks.append("</div>")
-    html("".join(blocks))
+    visual("".join(blocks))
 
 
 def monitoring_timeline_figure(items: list[dict], active_key: str) -> None:
@@ -2341,65 +3230,282 @@ def monitoring_timeline_figure(items: list[dict], active_key: str) -> None:
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
-def ci_pipeline_figure() -> None:
-    steps = [
-        ("01", "Checkout", "Repository state and Python runtime are prepared.", "GitHub Actions", "#2088ff", "GA"),
-        ("02", "Compile", "DAGs and production modules must import cleanly.", "Python", "#3776ab", "Py"),
-        ("03", "Test contracts", "Airflow, dependency, API, MLflow, and drift checks run.", "Airflow", "#017cee", "AF"),
-        ("04", "Build images", "FastAPI and Airflow image build paths are validated.", "Docker", "#2496ed", "Do"),
-        ("05", "Merge signal", "The branch is ready only when the operating contracts pass.", "Kubernetes", "#326ce5", "K8s"),
-    ]
-    blocks = ["<div class='ci-figure'><div class='ci-track'>"]
-    for step, title, body, logo_name, color, mark in steps:
-        blocks.append(
-            f"<div class='ci-step' style='--c:{escape(color)}'>"
-            f"<div class='node-head'>{logo_badge(logo_name, color, mark)}"
-            f"<div><small>{escape(step)}</small><b>{escape(title)}</b></div></div>"
-            f"<span>{escape(body)}</span>"
-            "</div>"
-        )
-    gates = [
-        "DAG import",
-        "Dependency pins",
-        "Prediction contract",
-        "Drift report",
-        "MLflow logging",
-        "Docker build",
-    ]
-    blocks.append("</div><div class='ci-gates'>")
-    for gate in gates:
-        blocks.append(f"<span>{escape(gate)}</span>")
-    blocks.append("</div></div>")
-    html("".join(blocks))
+def dvc_lineage_figure(active_key: str) -> None:
+    specs = {
+        "raw": {
+            "title": "Raw weather data",
+            "role": "Training source",
+            "color": "#1f76d2",
+            "pointer": PROJECT_ROOT / "data" / "raw" / "weatherAUS.csv.dvc",
+            "line1": "The checksum identifies the exact training rows.",
+            "line2": "Git reviews the pointer; DagsHub stores the large CSV.",
+            "icon": "database",
+        },
+        "model": {
+            "title": "Winner model",
+            "role": "Prediction artifact",
+            "color": "#c99522",
+            "pointer": PROJECT_ROOT / "models" / "final_winner" / "winner_model.joblib.dvc",
+            "line1": "The API restores one identified winner package.",
+            "line2": "A model change becomes a reviewable repository revision.",
+            "icon": "cube",
+        },
+        "reference": {
+            "title": "Drift reference",
+            "role": "Monitoring baseline",
+            "color": "#e31b23",
+            "pointer": PROJECT_ROOT / "data" / "monitoring" / "reference_dataset.csv.dvc",
+            "line1": "Drift always compares against one fixed baseline.",
+            "line2": "The reference remains recoverable with every run.",
+            "icon": "target",
+        },
+    }
+    item = specs[active_key]
+    pointer = read_dvc_pointer(item["pointer"])
+    digest = str(pointer["md5"])
+    short_digest = f"{digest[:12]}…" if len(digest) > 12 else digest
+    remote_url = read_dvc_remote_url().replace("https://", "")
+    remote_label = remote_url.split("/", 1)[0]
+    color = item["color"]
+    if item["icon"] == "database":
+        artifact_icon = """
+          <ellipse cx="286" cy="430" rx="39" ry="12" fill="none" stroke="white" stroke-width="7"/>
+          <path d="M247 430v42c0 8 18 13 39 13s39-5 39-13v-42M247 451c0 8 18 13 39 13s39-5 39-13" fill="none" stroke="white" stroke-width="7"/>
+        """
+    elif item["icon"] == "cube":
+        artifact_icon = """
+          <path d="M286 402l40 22v45l-40 22-40-22v-45z" fill="none" stroke="white" stroke-width="7" stroke-linejoin="round"/>
+          <path d="M246 424l40 23 40-23M286 447v44" fill="none" stroke="white" stroke-width="6" stroke-linejoin="round"/>
+        """
+    else:
+        artifact_icon = """
+          <circle cx="286" cy="446" r="40" fill="none" stroke="white" stroke-width="7"/>
+          <circle cx="286" cy="446" r="22" fill="none" stroke="white" stroke-width="6" opacity=".86"/>
+          <circle cx="286" cy="446" r="7" fill="white"/>
+          <path d="M286 397v14M286 481v14M237 446h14M321 446h14" stroke="white" stroke-width="6" stroke-linecap="round"/>
+        """
+    visual(
+        f"""
+        <div class="visual-stage">
+          <svg viewBox="0 0 1200 650" role="img" aria-label="DVC lineage from Git revision through content address to DagsHub remote storage">
+            <defs>
+              <linearGradient id="dvcBg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#edf5fb"/></linearGradient>
+              <linearGradient id="dvcHero" x1="0" y1="0" x2="1" y2="1"><stop stop-color="{escape(color)}"/><stop offset="1" stop-color="#6557b6"/></linearGradient>
+              <linearGradient id="dvcGlass" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#f5f8fb"/></linearGradient>
+              <filter id="softShadow"><feDropShadow dx="0" dy="10" stdDeviation="11" flood-color="#173848" flood-opacity=".14"/></filter>
+              <marker id="dvcArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0l10 5-10 5z" fill="#6557b6"/></marker>
+            </defs>
+            <rect x="28" y="28" width="1144" height="594" rx="34" fill="url(#dvcBg)"/>
+            <text x="600" y="68" text-anchor="middle" class="svg-kicker" fill="#6557b6" font-size="14">GIT REVISION  →  CONTENT ADDRESS  →  REMOTE OBJECT</text>
+
+            <path d="M350 177h94M756 177h94" fill="none" stroke="#6557b6" stroke-width="7" stroke-linecap="round" marker-end="url(#dvcArrow)" class="flow-dash"/>
+
+            <g filter="url(#softShadow)">
+              <rect x="70" y="96" width="280" height="162" rx="26" fill="url(#dvcGlass)" stroke="#d7e1e7"/>
+              <rect x="70" y="96" width="8" height="162" rx="4" fill="#172b36"/>
+              <circle cx="132" cy="151" r="34" fill="#172b36"/>
+              <circle cx="118" cy="139" r="5" fill="white"/><circle cx="144" cy="135" r="5" fill="white"/><circle cx="144" cy="165" r="5" fill="white"/>
+              <path d="M118 144v16c0 12 26 11 26 0v-20M123 151h16" fill="none" stroke="white" stroke-width="4" stroke-linecap="round"/>
+              <text x="183" y="145" class="svg-kicker" fill="#172b36" font-size="13">GIT</text>
+              <text x="183" y="174" class="svg-label" font-size="23">Revision</text>
+              <text x="104" y="221" class="svg-muted" font-size="15">Commits code + lightweight pointer</text>
+            </g>
+
+            <g filter="url(#softShadow)">
+              <rect x="460" y="96" width="280" height="162" rx="26" fill="url(#dvcGlass)" stroke="#d7e1e7"/>
+              <rect x="460" y="96" width="8" height="162" rx="4" fill="#13adc7"/>
+              <circle cx="522" cy="151" r="34" fill="#eefbfc" stroke="#13adc7" stroke-width="3"/>
+              <image x="497" y="126" width="50" height="50" href="{TOOL_LOGOS['DVC']}"/>
+              <text x="573" y="145" class="svg-kicker" fill="#13adc7" font-size="13">DVC</text>
+              <text x="573" y="174" class="svg-label" font-size="23">Checksum</text>
+              <text x="494" y="221" class="svg-muted" font-size="15">Maps the pointer to exact content</text>
+            </g>
+
+            <g filter="url(#softShadow)">
+              <rect x="850" y="96" width="280" height="162" rx="26" fill="url(#dvcGlass)" stroke="#d7e1e7"/>
+              <rect x="850" y="96" width="8" height="162" rx="4" fill="#278455"/>
+              <circle cx="912" cy="151" r="34" fill="#278455"/>
+              <path d="M889 158h45c7 0 12-5 12-11s-5-11-11-11c-3 0-5 1-7 2-3-8-10-13-19-13-11 0-20 8-20 19-5 1-9 5-9 10 0 6 5 11 11 11z" fill="white" fill-opacity=".94"/>
+              <path d="M912 138v24M904 154l8 8 8-8" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+              <text x="963" y="145" class="svg-kicker" fill="#278455" font-size="13">DAGSHUB</text>
+              <text x="963" y="174" class="svg-label" font-size="23">Remote</text>
+              <text x="884" y="216" class="svg-muted" font-size="14">{escape(remote_label)}</text>
+              <text x="884" y="238" class="svg-muted" font-size="14">Stores the large artifact object</text>
+            </g>
+
+            <path d="M600 258v55" fill="none" stroke="{escape(color)}" stroke-width="7" stroke-linecap="round" marker-end="url(#dvcArrow)" class="flow-dash"/>
+
+            <g filter="url(#softShadow)">
+              <rect x="125" y="326" width="950" height="246" rx="34" fill="white" fill-opacity=".96" stroke="{escape(color)}" stroke-width="2"/>
+              <rect x="125" y="326" width="12" height="246" rx="6" fill="{escape(color)}"/>
+              <circle cx="286" cy="446" r="82" fill="url(#dvcHero)" class="pulse"/>
+              {artifact_icon}
+
+              <text x="406" y="382" class="svg-kicker" fill="{escape(color)}" font-size="14">{escape(item['role'])}</text>
+              <text x="406" y="420" class="svg-label" font-size="29">{escape(item['title'])}</text>
+              <text x="406" y="453" class="svg-muted" font-size="15">{escape(item['line1'])}</text>
+              <text x="406" y="479" class="svg-muted" font-size="15">{escape(item['line2'])}</text>
+
+              <rect x="406" y="505" width="420" height="42" rx="21" fill="#f2f6f8" stroke="#d7e1e7"/>
+              <text x="426" y="532" class="svg-label" font-size="14">{escape(item['pointer'].name)}  ·  md5 {escape(short_digest)}  ·  {escape(fmt_bytes(pointer['size']))}</text>
+
+              <g transform="translate(900 388)">
+                <circle cx="0" cy="0" r="14" fill="#e9f7ef"/><path d="M-6 0l4 5 9-11" fill="none" stroke="#278455" stroke-width="4" stroke-linecap="round"/><text x="28" y="6" class="svg-label" font-size="16">Exact</text>
+                <circle cx="0" cy="52" r="14" fill="#eaf3fd"/><path d="M-6 52h12M0 46v12" fill="none" stroke="#1f76d2" stroke-width="4" stroke-linecap="round"/><text x="28" y="58" class="svg-label" font-size="16">Portable</text>
+                <circle cx="0" cy="104" r="14" fill="#fbf3df"/><path d="M-5 104l4 4 8-9" fill="none" stroke="#c99522" stroke-width="4" stroke-linecap="round"/><text x="28" y="110" class="svg-label" font-size="16">Auditable</text>
+              </g>
+            </g>
+          </svg>
+        </div>
+        """
+    )
+
+
+def ci_pipeline_figure(active_key: str) -> None:
+    stories = {
+        "code": ("#3776ab", "Code integrity", "Python modules and dependencies must form one importable environment.", "compile · dependency pins · MLflow dry run"),
+        "workflow": ("#017cee", "Workflow contracts", "DAGs, prediction, tracking, and drift must still agree on their interfaces.", "Airflow · FastAPI · Evidently · MLflow"),
+        "delivery": ("#2496ed", "Deployable runtime", "The validated change must also build into the API and Airflow images.", "Compose config · API image · Airflow image"),
+    }
+    color, title, body, evidence = stories[active_key]
+    code_opacity = "1" if active_key == "code" else ".42"
+    workflow_opacity = "1" if active_key == "workflow" else ".42"
+    delivery_opacity = "1" if active_key == "delivery" else ".42"
+    visual(
+        f"""
+        <div class="visual-stage">
+          <svg viewBox="0 0 1200 650" role="img" aria-label="Continuous integration quality gate with parallel Python and Docker jobs">
+            <defs>
+              <linearGradient id="ciBg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#eef8f4"/></linearGradient>
+              <filter id="ciShadow"><feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#173848" flood-opacity=".15"/></filter>
+              <marker id="ciArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0l10 5-10 5z" fill="#637983"/></marker>
+            </defs>
+            <rect x="28" y="28" width="1144" height="594" rx="34" fill="url(#ciBg)"/>
+            <text x="600" y="73" text-anchor="middle" class="svg-kicker" fill="#278455" font-size="15">ONE CHANGE · TWO PARALLEL JOBS · ONE MERGE SIGNAL</text>
+
+            <g transform="translate(118 302)" filter="url(#ciShadow)">
+              <circle r="70" fill="white" stroke="#d7e1e7" stroke-width="2"/>
+              <circle r="46" fill="#eef5ff"/>
+              <image x="-30" y="-30" width="60" height="60" href="{TOOL_LOGOS['GitHub Actions']}"/>
+              <text x="0" y="105" text-anchor="middle" class="svg-label" font-size="22">Push / pull request</text>
+            </g>
+            <path d="M190 302h76" fill="none" stroke="#637983" stroke-width="7" marker-end="url(#ciArrow)"/>
+            <circle cx="292" cy="302" r="18" fill="#173848"/>
+
+            <path d="M292 302C334 302 332 185 386 185H882C916 185 925 237 948 270" fill="none" stroke="#3776ab" stroke-width="9" stroke-linecap="round" opacity="{code_opacity}"/>
+            <path d="M292 302C334 302 332 419 386 419H882C916 419 925 367 948 334" fill="none" stroke="#2496ed" stroke-width="9" stroke-linecap="round" opacity="{delivery_opacity}"/>
+
+            <g opacity="{code_opacity}">
+              <text x="408" y="132" class="svg-kicker" fill="#3776ab" font-size="14">PYTHON-CONTRACT</text>
+              <g transform="translate(430 185)" filter="url(#ciShadow)"><rect x="-54" y="-45" width="108" height="90" rx="24" fill="white" stroke="#d7e1e7"/><circle r="31" fill="#edf4fb"/><image x="-23" y="-23" width="46" height="46" href="{TOOL_LOGOS['Python']}"/><text x="0" y="75" text-anchor="middle" class="svg-label" font-size="18">Compile</text></g>
+              <g transform="translate(615 185)" filter="url(#ciShadow)"><rect x="-54" y="-45" width="108" height="90" rx="24" fill="white" stroke="#d7e1e7"/><circle r="31" fill="#edf4fb"/><image x="-23" y="-23" width="46" height="46" href="{TOOL_LOGOS['Scikit-learn']}"/><text x="0" y="75" text-anchor="middle" class="svg-label" font-size="18">Dependencies</text></g>
+            </g>
+            <g opacity="{workflow_opacity}">
+              <g transform="translate(800 185)" filter="url(#ciShadow)"><rect x="-58" y="-49" width="116" height="98" rx="26" fill="white" stroke="#017cee" stroke-width="3"/><circle r="33" fill="#edf7ff"/><image x="-24" y="-24" width="48" height="48" href="{TOOL_LOGOS['Airflow']}"/><text x="0" y="82" text-anchor="middle" class="svg-label" font-size="18">5 contract suites</text></g>
+              <path d="M690 185h52" stroke="#017cee" stroke-width="10" stroke-linecap="round" class="flow-dash"/>
+            </g>
+            <g opacity="{delivery_opacity}">
+              <text x="408" y="476" class="svg-kicker" fill="#2496ed" font-size="14">DOCKER-BUILD</text>
+              <g transform="translate(430 419)" filter="url(#ciShadow)"><rect x="-54" y="-45" width="108" height="90" rx="24" fill="white" stroke="#d7e1e7"/><circle r="31" fill="#edf7ff"/><image x="-23" y="-23" width="46" height="46" href="{TOOL_LOGOS['Docker']}"/><text x="0" y="75" text-anchor="middle" class="svg-label" font-size="18">Compose</text></g>
+              <g transform="translate(615 419)" filter="url(#ciShadow)"><rect x="-54" y="-45" width="108" height="90" rx="24" fill="white" stroke="#d7e1e7"/><circle r="31" fill="#edf8f6"/><image x="-23" y="-23" width="46" height="46" href="{TOOL_LOGOS['FastAPI']}"/><text x="0" y="75" text-anchor="middle" class="svg-label" font-size="18">FastAPI image</text></g>
+              <g transform="translate(800 419)" filter="url(#ciShadow)"><rect x="-54" y="-45" width="108" height="90" rx="24" fill="white" stroke="#d7e1e7"/><circle r="31" fill="#edf7ff"/><image x="-23" y="-23" width="46" height="46" href="{TOOL_LOGOS['Airflow']}"/><text x="0" y="75" text-anchor="middle" class="svg-label" font-size="18">Airflow image</text></g>
+            </g>
+
+            <g transform="translate(1018 302)" filter="url(#ciShadow)" class="pulse">
+              <path d="M0-72l66 25v48c0 49-28 82-66 102C-38 83-66 50-66 1v-48z" fill="#278455"/>
+              <path d="M-26 2l18 19 38-45" fill="none" stroke="white" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+              <text x="0" y="139" text-anchor="middle" class="svg-label" font-size="23">Safe merge signal</text>
+            </g>
+
+            <circle cx="94" cy="556" r="9" fill="{escape(color)}"/>
+            <text x="116" y="550" class="svg-kicker" fill="{escape(color)}" font-size="14">{escape(title)}</text>
+            <text x="116" y="581" class="svg-label" font-size="20">{escape(body)}</text>
+            <text x="116" y="609" class="svg-muted" font-size="16">{escape(evidence)}</text>
+          </svg>
+        </div>
+        """
+    )
+
+
+def kubernetes_runtime_figure(active_key: str) -> None:
+    stories = {
+        "serving": ("#009688", "Prediction serving", "A stable service routes traffic to replaceable FastAPI replicas."),
+        "workflow": ("#017cee", "Workflow automation", "Scheduler and workers coordinate DAG tasks through Redis and Postgres."),
+        "observability": ("#f46800", "Evidence and observability", "MLflow preserves training evidence while Prometheus and Grafana expose runtime signals."),
+        "resilience": ("#326ce5", "Resilient operation", "PVCs preserve state; HPA and PDB policies protect capacity and availability."),
+    }
+    color, title, body = stories[active_key]
+    op = {key: ("1" if key == active_key else ".36") for key in stories}
+    visual(
+        f"""
+        <div class="visual-stage">
+          <svg viewBox="0 0 1200 720" role="img" aria-label="Kubernetes runtime map connecting gateway, serving, orchestration, evidence, monitoring, and persistence">
+            <defs>
+              <linearGradient id="k8sBg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#edf4ff"/></linearGradient>
+              <filter id="k8sShadow"><feDropShadow dx="0" dy="10" stdDeviation="11" flood-color="#173848" flood-opacity=".16"/></filter>
+              <marker id="k8sArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0l10 5-10 5z" fill="#326ce5"/></marker>
+            </defs>
+            <rect x="28" y="28" width="1144" height="664" rx="34" fill="url(#k8sBg)"/>
+            <rect x="70" y="96" width="1060" height="500" rx="90" fill="none" stroke="#326ce5" stroke-width="3" stroke-dasharray="12 12" opacity=".38"/>
+            <text x="96" y="130" class="svg-kicker" fill="#326ce5" font-size="14">KUBERNETES NAMESPACE</text>
+
+            <g transform="translate(600 105)" filter="url(#k8sShadow)">
+              <circle r="62" fill="white" stroke="#d7e1e7" stroke-width="2"/>
+              <circle r="43" fill="#eaf7ee"/>
+              <image x="-30" y="-30" width="60" height="60" href="{TOOL_LOGOS['Nginx']}"/>
+              <text x="0" y="92" text-anchor="middle" class="svg-label" font-size="21">Nginx gateway</text>
+            </g>
+            <path d="M600 170v55M590 219C470 214 375 217 300 259M610 219C730 214 825 217 900 259" fill="none" stroke="#326ce5" stroke-width="6" stroke-linecap="round" marker-end="url(#k8sArrow)"/>
+
+            <g opacity="{op['serving']}" filter="url(#k8sShadow)">
+              <path d="M110 305c0-62 51-112 114-112 38 0 72 18 93 47 12-8 27-12 43-12 47 0 85 38 85 85s-38 85-85 85H196c-48 0-86-39-86-93z" fill="#e3f7f4" stroke="#009688" stroke-width="5"/>
+              <circle cx="232" cy="304" r="52" fill="white" stroke="#009688" stroke-width="4"/><image x="199" y="271" width="66" height="66" href="{TOOL_LOGOS['FastAPI']}"/>
+              <circle cx="342" cy="278" r="27" fill="#ffffff" stroke="#009688" stroke-width="5"/><text x="342" y="284" text-anchor="middle" fill="#009688" font-size="13" font-weight="900">POD</text>
+              <circle cx="342" cy="348" r="27" fill="#ffffff" stroke="#009688" stroke-width="5"/><text x="342" y="354" text-anchor="middle" fill="#009688" font-size="13" font-weight="900">POD</text>
+              <text x="278" y="436" text-anchor="middle" class="svg-label" font-size="22">FastAPI replicas</text>
+              <text x="278" y="462" text-anchor="middle" class="svg-muted" font-size="16">stable discovery · replaceable pods</text>
+            </g>
+
+            <g opacity="{op['workflow']}" filter="url(#k8sShadow)">
+              <path d="M416 295c0-60 49-109 109-109 31 0 59 13 79 34 18-19 44-30 73-30 56 0 101 45 101 101 0 57-45 102-101 102H505c-49 0-89-40-89-98z" fill="#e8f5ff" stroke="#017cee" stroke-width="5"/>
+              <circle cx="520" cy="292" r="43" fill="white" stroke="#017cee" stroke-width="4"/><image x="493" y="265" width="54" height="54" href="{TOOL_LOGOS['Airflow']}"/>
+              <circle cx="618" cy="268" r="39" fill="#017cee"/><text x="618" y="275" text-anchor="middle" fill="white" font-size="14" font-weight="900">SCHED</text>
+              <circle cx="608" cy="354" r="30" fill="white" stroke="#017cee" stroke-width="6"/><text x="608" y="360" text-anchor="middle" fill="#017cee" font-size="13" font-weight="900">WORK</text>
+              <circle cx="686" cy="338" r="30" fill="white" stroke="#017cee" stroke-width="6"/><text x="686" y="344" text-anchor="middle" fill="#017cee" font-size="13" font-weight="900">WORK</text>
+              <text x="597" y="436" text-anchor="middle" class="svg-label" font-size="22">Airflow orchestration</text>
+              <text x="597" y="462" text-anchor="middle" class="svg-muted" font-size="16">webserver · scheduler · Celery workers</text>
+            </g>
+
+            <g opacity="{op['observability']}" filter="url(#k8sShadow)">
+              <path d="M774 301c0-61 49-110 110-110 31 0 59 13 79 34 18-20 44-32 74-32 56 0 102 46 102 102 0 56-46 102-102 102H864c-50 0-90-40-90-96z" fill="#fff2e8" stroke="#f46800" stroke-width="5"/>
+              <circle cx="872" cy="294" r="42" fill="white" stroke="#0194e2" stroke-width="4"/><image x="845" y="267" width="54" height="54" href="{TOOL_LOGOS['MLflow']}"/>
+              <circle cx="977" cy="267" r="42" fill="white" stroke="#e6522c" stroke-width="4"/><image x="950" y="240" width="54" height="54" href="{TOOL_LOGOS['Prometheus']}"/>
+              <circle cx="1022" cy="351" r="42" fill="white" stroke="#f46800" stroke-width="4"/><image x="995" y="324" width="54" height="54" href="{TOOL_LOGOS['Grafana']}"/>
+              <path d="M914 290l20-10M991 306l17 20" stroke="#173848" stroke-width="5" opacity=".48"/>
+              <text x="956" y="436" text-anchor="middle" class="svg-label" font-size="22">Evidence + monitoring</text>
+              <text x="956" y="462" text-anchor="middle" class="svg-muted" font-size="16">training history · metrics · dashboards</text>
+            </g>
+
+            <g opacity="{op['resilience']}" filter="url(#k8sShadow)">
+              <path d="M275 515c125-50 524-51 650 0v83H275z" fill="#eaf1ff" stroke="#326ce5" stroke-width="5"/>
+              <g transform="translate(390 550)"><circle r="34" fill="white" stroke="#4169e1" stroke-width="3"/><text text-anchor="middle" y="6" fill="#4169e1" font-size="13" font-weight="900">PVC</text></g>
+              <g transform="translate(500 550)"><circle r="34" fill="white" stroke="#4169e1" stroke-width="3"/><image x="-22" y="-22" width="44" height="44" href="{TOOL_LOGOS['PostgreSQL']}"/></g>
+              <g transform="translate(610 550)"><circle r="34" fill="white" stroke="#ff4438" stroke-width="3"/><image x="-22" y="-22" width="44" height="44" href="{TOOL_LOGOS['Redis']}"/></g>
+              <g transform="translate(720 550)"><circle r="34" fill="white" stroke="#326ce5" stroke-width="3"/><text text-anchor="middle" y="6" fill="#326ce5" font-size="14" font-weight="900">HPA</text></g>
+              <g transform="translate(830 550)"><circle r="34" fill="white" stroke="#326ce5" stroke-width="3"/><text text-anchor="middle" y="6" fill="#326ce5" font-size="14" font-weight="900">PDB</text></g>
+            </g>
+
+            <circle cx="90" cy="644" r="9" fill="{escape(color)}"/>
+            <text x="114" y="638" class="svg-kicker" fill="{escape(color)}" font-size="14">{escape(title)}</text>
+            <text x="114" y="672" class="svg-label" font-size="20">{escape(body)}</text>
+          </svg>
+        </div>
+        """
+    )
 
 
 def data_science_page() -> None:
-    hero()
     prediction_studio()
-
-    st.divider()
-    compact_header(
-        "Data science foundation",
-        "What the model learned before production",
-        "The data science part stays focused on the rain-tomorrow problem, the saved feature contract, and a time-aware evaluation.",
-        "#278455",
-    )
-    metric_cards(
-        [
-            ("Winner model", "CatBoost", "hybrid tabular weather classifier"),
-            ("Feature contract", str(FEATURE_COUNT), f"{len(CATEGORICAL_FEATURES)} categorical, stored with metadata"),
-            ("ROC AUC", fmt_pct(METRICS.get("roc_auc")), "chronological holdout evaluation"),
-            ("F1 score", fmt_pct(METRICS.get("f1")), f"at the saved {THRESHOLD * 100:.0f}% threshold"),
-        ]
-    )
-    stage_cards(
-        [
-            ("Question", "Tomorrow rain", "WeatherAUS observations are framed as a binary next-day rain prediction problem.", "#1f76d2"),
-            ("Preparation", "Stable contract", "Cleaning and feature engineering produce the same ordered inputs for training and serving.", "#278455"),
-            ("Validation", "Time-aware test", "The newest observations are held out so the score reflects a future-facing forecast setting.", "#c99522"),
-            ("Handoff", "Model package", "The model, threshold, metadata, fill values, and sample input are stored together for MLOps.", "#945dd6"),
-        ]
-    )
 
 
 def endpoint_table() -> None:
@@ -2429,16 +3535,12 @@ def endpoint_table() -> None:
 def architecture_page() -> None:
     section_header(
         "MLOps architecture",
-        "The system, end to end",
-        "The diagram separates the data science base, scheduled training, tracking, monitoring, CI validation, and Kubernetes serving. Docker images support the runtime; Kubernetes is the production-style target.",
+        "One contract connects the whole system",
+        "Data, automation, validation, monitoring, and serving exchange one versioned model package.",
         "#326ce5",
     )
     if ARCHITECTURE_IMAGE_PATH.exists():
         st.image(str(ARCHITECTURE_IMAGE_PATH), width="stretch")
-        html(
-            "<div class='caption'>Monitoring, Training, and Deployment stay separated but share one artifact contract — "
-            "drift checks feed back into scheduled retraining, and every trained package flows to the Kubernetes-served API.</div>"
-        )
     else:
         st.warning("Architecture image is missing.")
 
@@ -2446,130 +3548,41 @@ def architecture_page() -> None:
 def structure_page() -> None:
     section_header(
         "Project structure",
-        "Production implementation structure",
-        "The project is organized as data flow, artifact flow, automation flow, monitoring flow, and runtime flow.",
+        "Every responsibility has one clear home",
+        "Data, models, automation, monitoring, and runtime infrastructure remain clearly separated in the repository.",
         "#278455",
     )
-    steps = [
-        {
-            "key": "data",
-            "step": "01",
-            "short": "Data prep",
-            "label": "01 Data prep",
-            "kicker": "Data flow",
-            "title": "Incoming rows become a reproducible training source",
-            "body": "Weather observations are normalized into the same WeatherAUS-style shape used by the original data science project, then upserted by Date and Location so reruns stay clean.",
-            "evidence": [
-                "Raw weather data is DVC-tracked, not treated as an invisible notebook input.",
-                "New extracted rows enter the same chronological split path as the historical rows.",
-                "Freshness and input snapshots are written into reports/versioning during Airflow runs.",
-            ],
-            "artifacts": ["data/raw/weatherAUS.csv.dvc", "src/data/", "reports/versioning/"],
-            "color": "#1f76d2",
-        },
-        {
-            "key": "features",
-            "step": "02",
-            "short": "Feature contract",
-            "label": "02 Features",
-            "kicker": "Model contract",
-            "title": "The API and retraining code share one 68-feature contract",
-            "body": "The winner model expects ordered numeric and categorical inputs with saved fill values, location context, wind features, humidity, pressure, lag features, and climate/rainfall bins.",
-            "evidence": [
-                "Metadata stores the feature list, categorical features, threshold, and evaluation window.",
-                "The prediction payload is assembled from the same contract used by the served API.",
-                "The presentation prediction example reads the saved sample input instead of inventing fields.",
-            ],
-            "artifacts": ["models/final_winner/metadata.json", "model_config.json", "sample_input.json"],
-            "color": "#278455",
-        },
-        {
-            "key": "model",
-            "step": "03",
-            "short": "Model package",
-            "label": "03 Model",
-            "kicker": "Training output",
-            "title": "Training writes an operating package, not just a score",
-            "body": "Every training cycle rewrites the CatBoost model, metadata, sample payload, and monitoring reference so downstream services use one synchronized package.",
-            "evidence": [
-                "Winner model artifacts are saved together under models/final_winner.",
-                "The reference dataset used by Evidently is regenerated by training.",
-                "Evaluation metrics are logged with the same threshold that the API uses.",
-            ],
-            "artifacts": ["winner_model.joblib.dvc", "metadata.json", "data/monitoring/reference_dataset.csv.dvc"],
-            "color": "#c99522",
-        },
-        {
-            "key": "lineage",
-            "step": "04",
-            "short": "Lineage",
-            "label": "04 Lineage",
-            "kicker": "Versioning",
-            "title": "DVC records artifact identity while Airflow records run context",
-            "body": "The workflow captures which raw data pointer, model pointer, metadata, and sample payload were present around each scheduled run.",
-            "evidence": [
-                "DVC pointers keep large data/model artifacts pullable without bloating Git.",
-                "Airflow writes input, output, DVC status, and freshness manifests.",
-                "The model artifact can be published to the DagsHub-backed DVC remote so runtime pods can pull the latest tracked package.",
-            ],
-            "artifacts": ["*.dvc", "src/versioning/", "reports/versioning/*.json"],
-            "color": "#945dd6",
-        },
-        {
-            "key": "automation",
-            "step": "05",
-            "short": "Automation",
-            "label": "05 Airflow",
-            "kicker": "Orchestration",
-            "title": "Airflow connects ingestion, training, tracking, validation, and drift",
-            "body": "The project runs as scheduled DAGs with explicit failure points instead of manual notebook execution.",
-            "evidence": [
-                "Five Airflow DAGs are configured across ingestion, versioning, retraining, drift, and model-performance monitoring.",
-                "The end-to-end DAG retrains, logs to MLflow, validates API behavior, and records status.",
-                "The drift and model-performance DAGs feed monitoring evidence for downstream dashboards.",
-            ],
-            "artifacts": ["airflow/dags/", "docker/airflow/", "tests/test_airflow_automation.py"],
-            "color": "#017cee",
-        },
-        {
-            "key": "runtime",
-            "step": "06",
-            "short": "Runtime",
-            "label": "06 Runtime",
-            "kicker": "Deployment",
-            "title": "Kubernetes describes the production-style runtime boundary",
-            "body": "The manifests separate API serving, Airflow web/scheduler/workers, Redis, Postgres, Pushgateway, PVCs, HPAs, PDBs, and services.",
-            "evidence": [
-                "Kustomization is the deployment entry point for the validated runtime bundle.",
-                "Persistent volumes keep Airflow logs, project workspace, Redis, and Postgres state.",
-                "HPAs and PDBs make the API and Airflow workers closer to production operation.",
-            ],
-            "artifacts": ["kubernetes/kustomization.yaml", "kubernetes/*deployment.yaml", "kubernetes/*pvc*.yaml"],
-            "color": "#326ce5",
-        },
-    ]
-    labels = [item["label"] for item in steps]
-    selected_label = st.radio("Production layer", labels, horizontal=True, label_visibility="collapsed")
-    active = next(item for item in steps if item["label"] == selected_label)
-    structure_blueprint_figure(active["key"])
-    interactive_detail(active)
+    autoplay_visual(
+        structure_blueprint_figure,
+        ("data", "model", "automation", "monitoring", "runtime"),
+    )
+
+
+def dvc_page() -> None:
+    section_header(
+        "DVC artifact lineage",
+        "Every artifact is recoverable",
+        "Git tracks lightweight pointers while DVC restores the exact data, model, and drift baseline from remote storage.",
+        "#945dd6",
+    )
+    autoplay_visual(dvc_lineage_figure, ("raw", "model", "reference"))
 
 
 def ci_page() -> None:
     section_header(
         "CI pipeline",
-        "The merge-time quality gate",
-        "The pipeline checks the contracts that keep the production workflow from silently drifting.",
+        "Every change passes one quality gate",
+        "Python contracts and container builds run in parallel before producing one merge signal.",
         "#2088ff",
     )
-    ci_pipeline_figure()
+    autoplay_visual(ci_pipeline_figure, ("code", "workflow", "delivery"))
 
 
 def monitoring_page() -> None:
     section_header(
         "Monitoring & retraining",
-        "The loop that keeps the model honest",
-        "Scheduled Airflow DAGs ingest observations, version artifacts, refresh the winner model, compare current data against the training reference, and publish model-performance signals.",
+        "Five workflows close the learning loop",
+        "Scheduled ingestion, versioning, performance checks, retraining, and drift monitoring keep the model evidence current.",
         "#e31b23",
     )
     dags = [
@@ -2593,7 +3606,7 @@ def monitoring_page() -> None:
         {
             "key": "e2e",
             "name": "end_to_end_mlops_pipeline",
-            "label": "E2E retraining",
+            "label": "Retraining",
             "schedule": "06:00",
             "purpose": "Train + validate",
             "kicker": "DAG 2",
@@ -2632,7 +3645,7 @@ def monitoring_page() -> None:
             "purpose": "Model metrics",
             "kicker": "DAG 4",
             "title": "Model-performance metrics are prepared before the main retraining run",
-            "body": "The model performance and drift DAG backfills recent prediction examples and evaluates RMSE, MAE, R2, and drift status so the monitoring dashboard has operational model evidence.",
+            "body": "The model performance and drift DAG backfills recent prediction examples and evaluates ROC AUC, F1, precision, recall, and drift status for the monitoring dashboard.",
             "evidence": [
                 "The DAG runs after ingestion so the latest available row can be included.",
                 "Metrics are pushed through the monitoring path for Prometheus and Grafana.",
@@ -2659,71 +3672,22 @@ def monitoring_page() -> None:
             "color": "#e31b23",
         },
     ]
-    selected_dag = st.radio("Monitoring loop", [item["label"] for item in dags], horizontal=True, label_visibility="collapsed")
-    active = next(item for item in dags if item["label"] == selected_dag)
-    monitoring_loop_figure(dags, active["key"])
-    monitoring_timeline_figure(dags, active["key"])
-    interactive_detail(active)
+    autoplay_visual(
+        lambda active_key: monitoring_loop_figure(dags, active_key),
+        (item["key"] for item in dags),
+    )
 
 
-def live_demo_page() -> None:
+def kubernetes_page() -> None:
     section_header(
-        "Live demo",
-        "Project workflow on the running system",
-        "The demo follows the same order as the project: quality gate, artifact lineage, orchestration, tracking, drift evidence, dashboard metrics, and Kubernetes runtime.",
-        "#c99522",
+        "Kubernetes runtime",
+        "One runtime, independently managed services",
+        "Nginx connects prediction, orchestration, observability, and persistent state across dedicated Kubernetes workloads.",
+        "#326ce5",
     )
-    items = [
-        ("GitHub Actions", "Merge-time checks validate imports, DAG loading, focused tests, API contracts, and image build paths.", "#2088ff"),
-        ("DVC", "Raw data, winner model, and monitoring reference are tracked as artifact pointers instead of hidden local files.", "#945dd6"),
-        ("Airflow", "Scheduled DAGs connect ingestion, DVC/versioning, model retraining, MLflow logging, API validation, performance metrics, and drift checks.", "#017cee"),
-        ("MLflow", "Training runs, metrics, parameters, and model artifacts provide experiment evidence for the selected model.", "#0194e2"),
-        ("Evidently", "Reference/current drift reports explain whether new data still behaves like the training reference.", "#e31b23"),
-        ("Grafana", "Operational dashboards read the Prometheus metrics path populated by the monitoring workflow.", "#f46800"),
-        ("Kubernetes", "The production target runs with pods, services, PVCs, HPAs, PDBs, secrets, config maps, and the model-fetching startup path.", "#326ce5"),
-    ]
-    cards = ["<div class='demo-grid'>"]
-    for title, body, color in items:
-        cards.append(
-            f"<div class='demo-card' style='--c:{escape(color)}'>"
-            f"<b style='display:flex;align-items:center;gap:.5rem'>{logo_badge(title, color)}{escape(title)}</b>"
-            f"<span>{escape(body)}</span>"
-            "</div>"
-        )
-    cards.append("</div>")
-    html("".join(cards))
-    st.write("")
-    compact_header(
-        "Supporting evidence",
-        "What the live screens prove",
-        "Each screen proves a different production concern: reproducibility, automation, traceability, monitoring, visualization, and deployability.",
-        "#2088ff",
-    )
-    services = [
-        ("CI", "The branch is safe to merge only after core contracts pass.", "#2088ff"),
-        ("DVC", "Artifacts can be traced back to their raw-data and model pointers.", "#945dd6"),
-        ("Airflow", "The pipeline is visible as scheduled tasks with clear failure points.", "#017cee"),
-        ("MLflow", "Training evidence is separate from runtime monitoring.", "#0194e2"),
-        ("Evidently", "Drift reports compare current data with the reference dataset.", "#e31b23"),
-        ("Kubernetes", "The final runtime is inspected through pods, services, logs, and rollout status.", "#326ce5"),
-    ]
-    strip = ["<div class='chip-row'>"]
-    for name, role, color in services:
-        strip.append(
-            f"<div class='tool-chip'>{logo_badge(name, color)}"
-            f"<span style='background:transparent;color:var(--ink);width:auto;height:auto;font-size:.85rem'>{escape(name)}</span>"
-            f"<span style='background:transparent;color:var(--muted);width:auto;height:auto;font-size:.78rem;font-weight:700'>{escape(role)}</span>"
-            "</div>"
-        )
-    strip.append("</div>")
-    html("".join(strip))
-    html(
-        """
-        <div class="handoff">
-          System summary: the model is no longer only a notebook result. It has artifact lineage, scheduled execution,
-          tracked training output, drift evidence, merge-time checks, and a Kubernetes runtime shape.
-        </div>
-        """
+    autoplay_visual(
+        kubernetes_runtime_figure,
+        ("serving", "workflow", "observability", "resilience"),
     )
 
 
@@ -2731,9 +3695,10 @@ PAGES = [
     ("Data Science + Prediction", data_science_page),
     ("MLOps Architecture", architecture_page),
     ("Structure", structure_page),
-    ("Monitoring & Retraining", monitoring_page),
+    ("DVC Lineage", dvc_page),
     ("CI Pipeline", ci_page),
-    ("Live System", live_demo_page),
+    ("Monitoring & Retraining", monitoring_page),
+    ("Kubernetes Runtime", kubernetes_page),
 ]
 
 
@@ -2760,7 +3725,11 @@ def sidebar_navigation() -> tuple[str, int]:
         st.session_state.active_page = labels[0]
     if "page_selector" not in st.session_state:
         st.session_state.page_selector = st.session_state.active_page
+    elif st.session_state.page_selector not in labels:
+        st.session_state.page_selector = st.session_state.active_page
     if "top_page_selector" not in st.session_state:
+        st.session_state.top_page_selector = st.session_state.active_page
+    elif st.session_state.top_page_selector not in labels:
         st.session_state.top_page_selector = st.session_state.active_page
 
     with st.sidebar:
@@ -2812,26 +3781,33 @@ def sidebar_navigation() -> tuple[str, int]:
     return st.session_state.active_page, labels.index(st.session_state.active_page)
 
 
-def deck_controls(index: int, position: str) -> None:
+def deck_controls(index: int) -> None:
     labels = [label for label, _ in PAGES]
-    prev_col, mid_col, next_col = st.columns([1.5, 3.2, 1.5])
+    prev_col, mid_col, next_col = st.columns([1.05, 4.6, 1.05])
     with prev_col:
         st.button(
-            "← Previous section",
+            "← Previous",
             disabled=index == 0,
             width="stretch",
-            key=f"{position}_previous",
+            key="presentation_previous",
             on_click=go_to_page,
             args=(labels[max(0, index - 1)],),
         )
     with mid_col:
-        st.progress((index + 1) / len(labels))
+        st.selectbox(
+            "Section",
+            labels,
+            key="top_page_selector",
+            label_visibility="collapsed",
+            format_func=lambda label: f"{labels.index(label) + 1} / {len(labels)} · {label}",
+            on_change=sync_page_from_top_selector,
+        )
     with next_col:
         st.button(
-            "Next section →",
+            "Next →",
             disabled=index == len(labels) - 1,
             width="stretch",
-            key=f"{position}_next",
+            key="presentation_next",
             type="primary",
             on_click=go_to_page,
             args=(labels[min(len(labels) - 1, index + 1)],),
@@ -2843,18 +3819,9 @@ def main() -> None:
     inject_theme()
     selected, index = sidebar_navigation()
     scroll_to_top_on_page_change(selected)
-    st.selectbox(
-        "Jump to section",
-        [label for label, _ in PAGES],
-        key="top_page_selector",
-        on_change=sync_page_from_top_selector,
-    )
-    html(f"<div class='slide-badge-row'><div class='slide-badge'>{index + 1} / {len(PAGES)} · {escape(selected.upper())}</div></div>")
-    deck_controls(index, "header")
+    deck_controls(index)
     _, renderer = PAGES[index]
     renderer()
-    st.divider()
-    deck_controls(index, "footer")
 
 
 if __name__ == "__main__":
