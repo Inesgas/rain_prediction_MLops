@@ -337,9 +337,21 @@ def inject_theme() -> None:
         div[data-testid="stMainMenu"],
         a[data-testid="stDeployButton"],
         div[data-testid="stStatusWidget"],
-        div[data-testid="stSidebarCollapsedControl"],
         header[data-testid="stHeader"] {
           display:none !important;
+        }
+        div[data-testid="stSidebarCollapsedControl"] {
+          display:flex !important;
+          position:fixed !important;
+          top:.75rem !important;
+          left:.75rem !important;
+          z-index:9999 !important;
+          background:rgba(23,56,72,.94) !important;
+          border-radius:999px !important;
+          box-shadow:0 4px 16px rgba(15,23,42,.22) !important;
+        }
+        div[data-testid="stSidebarCollapsedControl"] button {
+          color:#ffffff !important;
         }
         section[data-testid="stSidebar"] {
           background: linear-gradient(180deg, rgba(23,56,72,.99) 0%, rgba(34,79,84,.98) 100%);
@@ -910,8 +922,8 @@ def inject_theme() -> None:
         }
         .loop-figure {
           display:grid;
-          grid-template-columns:1fr .9fr 1fr;
-          grid-template-rows:auto auto auto;
+          grid-template-columns:repeat(5,minmax(0,1fr));
+          grid-template-rows:auto auto;
           gap:.72rem;
           align-items:stretch;
           border:1px solid rgba(227,27,35,.16);
@@ -924,11 +936,11 @@ def inject_theme() -> None:
           margin:.8rem 0 1rem;
         }
         .loop-core {
-          grid-column:2;
+          grid-column:1 / -1;
           grid-row:2;
           border:2px dashed rgba(23,56,72,.22);
-          border-radius:999px;
-          min-height:136px;
+          border-radius:10px;
+          min-height:92px;
           display:flex;
           flex-direction:column;
           align-items:center;
@@ -979,10 +991,12 @@ def inject_theme() -> None:
           line-height:1.28;
         }
         .loop-ingestion { grid-column:1; grid-row:1; }
-        .loop-versioning { grid-column:3; grid-row:1; }
-        .loop-e2e { grid-column:1; grid-row:3; }
-        .loop-drift { grid-column:3; grid-row:3; }
+        .loop-versioning { grid-column:2; grid-row:1; }
+        .loop-performance { grid-column:3; grid-row:1; }
+        .loop-e2e { grid-column:4; grid-row:1; }
+        .loop-drift { grid-column:5; grid-row:1; }
         .loop-arrow {
+          display:none;
           color:rgba(23,56,72,.34);
           font-weight:950;
           align-self:center;
@@ -1272,7 +1286,7 @@ def inject_theme() -> None:
           .pipe-arrow { transform:rotate(90deg); }
           .pipeline-node { min-height:auto; }
           .loop-figure { grid-template-columns:1fr; grid-template-rows:auto; }
-          .loop-core, .loop-ingestion, .loop-versioning, .loop-e2e, .loop-drift {
+          .loop-core, .loop-ingestion, .loop-versioning, .loop-performance, .loop-e2e, .loop-drift {
             grid-column:1;
             grid-row:auto;
           }
@@ -2245,6 +2259,7 @@ def monitoring_loop_figure(items: list[dict], active_key: str) -> None:
     positions = {
         "ingestion": "loop-ingestion",
         "versioning": "loop-versioning",
+        "performance": "loop-performance",
         "e2e": "loop-e2e",
         "drift": "loop-drift",
     }
@@ -2275,7 +2290,10 @@ def monitoring_loop_figure(items: list[dict], active_key: str) -> None:
 
 
 def monitoring_timeline_figure(items: list[dict], active_key: str) -> None:
-    x = [int(item["schedule"].split(":")[0]) for item in items]
+    x = []
+    for item in items:
+        hour, minute = item["schedule"].split(":")
+        x.append(int(hour) + int(minute) / 60.0)
     y = [1 for _ in items]
     names = [item["label"] for item in items]
     colors = [item["color"] for item in items]
@@ -2306,8 +2324,8 @@ def monitoring_timeline_figure(items: list[dict], active_key: str) -> None:
     )
     fig.update_xaxes(
         range=[2.4, 7.6],
-        tickvals=[3, 4, 5, 6, 7],
-        ticktext=["03:00", "04:00", "05:00", "06:00", "07:00"],
+        tickvals=[3, 4, 5.5, 6, 7],
+        ticktext=["03:00", "04:00", "05:30", "06:00", "07:00"],
         showgrid=False,
         zeroline=False,
         title=None,
@@ -2412,7 +2430,7 @@ def architecture_page() -> None:
     section_header(
         "MLOps architecture",
         "The system, end to end",
-        "Every logo in this diagram is a tool that lives in the repository — requirements.txt, airflow/dags, docker/, kubernetes/, and .github/workflows.",
+        "The diagram separates the data science base, scheduled training, tracking, monitoring, CI validation, and Kubernetes serving. Docker images support the runtime; Kubernetes is the production-style target.",
         "#326ce5",
     )
     if ARCHITECTURE_IMAGE_PATH.exists():
@@ -2492,7 +2510,7 @@ def structure_page() -> None:
             "evidence": [
                 "DVC pointers keep large data/model artifacts pullable without bloating Git.",
                 "Airflow writes input, output, DVC status, and freshness manifests.",
-                "Remote publishing remains controlled instead of being a hidden automated side effect.",
+                "The model artifact can be published to the DagsHub-backed DVC remote so runtime pods can pull the latest tracked package.",
             ],
             "artifacts": ["*.dvc", "src/versioning/", "reports/versioning/*.json"],
             "color": "#945dd6",
@@ -2506,9 +2524,9 @@ def structure_page() -> None:
             "title": "Airflow connects ingestion, training, tracking, validation, and drift",
             "body": "The project runs as scheduled DAGs with explicit failure points instead of manual notebook execution.",
             "evidence": [
-                "Four DAGs are configured for local and Kubernetes Airflow checks.",
+                "Five Airflow DAGs are configured across ingestion, versioning, retraining, drift, and model-performance monitoring.",
                 "The end-to-end DAG retrains, logs to MLflow, validates API behavior, and records status.",
-                "The drift DAG checks the latest current window against the training reference.",
+                "The drift and model-performance DAGs feed monitoring evidence for downstream dashboards.",
             ],
             "artifacts": ["airflow/dags/", "docker/airflow/", "tests/test_airflow_automation.py"],
             "color": "#017cee",
@@ -2551,7 +2569,7 @@ def monitoring_page() -> None:
     section_header(
         "Monitoring & retraining",
         "The loop that keeps the model honest",
-        "Four scheduled Airflow DAGs ingest new observations, retrain the winner, version every artifact, and compare live data against the training reference.",
+        "Scheduled Airflow DAGs ingest observations, version artifacts, refresh the winner model, compare current data against the training reference, and publish model-performance signals.",
         "#e31b23",
     )
     dags = [
@@ -2607,12 +2625,29 @@ def monitoring_page() -> None:
             "color": "#945dd6",
         },
         {
+            "key": "performance",
+            "name": "model_performance_and_drift",
+            "label": "Performance",
+            "schedule": "05:30",
+            "purpose": "Model metrics",
+            "kicker": "DAG 4",
+            "title": "Model-performance metrics are prepared before the main retraining run",
+            "body": "The model performance and drift DAG backfills recent prediction examples and evaluates RMSE, MAE, R2, and drift status so the monitoring dashboard has operational model evidence.",
+            "evidence": [
+                "The DAG runs after ingestion so the latest available row can be included.",
+                "Metrics are pushed through the monitoring path for Prometheus and Grafana.",
+                "This complements MLflow: MLflow explains training runs, while Grafana shows operational signals.",
+            ],
+            "artifacts": ["model_performance_and_drift_dag.py", "src/model_monitoring/", "Model Performance & Drift dashboard"],
+            "color": "#f46800",
+        },
+        {
             "key": "drift",
             "name": "drift_monitoring",
             "label": "Drift",
             "schedule": "07:00",
             "purpose": "Evidently + metrics",
-            "kicker": "DAG 4",
+            "kicker": "DAG 5",
             "title": "Drift compares current features against the model reference",
             "body": "The drift DAG verifies the reference dataset, runs Evidently over a full seasonal window, logs the HTML report to MLflow, and pushes summary values to Pushgateway for Grafana.",
             "evidence": [
@@ -2634,14 +2669,18 @@ def monitoring_page() -> None:
 def live_demo_page() -> None:
     section_header(
         "Live demo",
-        "Three checkpoints from artifact to runtime",
-        "The demo connects the repository to a running production-style workflow: DVC lineage, Airflow automation, and Kubernetes runtime resources.",
+        "Project workflow on the running system",
+        "The demo follows the same order as the project: quality gate, artifact lineage, orchestration, tracking, drift evidence, dashboard metrics, and Kubernetes runtime.",
         "#c99522",
     )
     items = [
+        ("GitHub Actions", "Merge-time checks validate imports, DAG loading, focused tests, API contracts, and image build paths.", "#2088ff"),
         ("DVC", "Raw data, winner model, and monitoring reference are tracked as artifact pointers instead of hidden local files.", "#945dd6"),
-        ("Airflow", "Scheduled DAGs connect ingestion, DVC/versioning, model retraining, MLflow logging, API validation, and drift checks.", "#017cee"),
-        ("Kubernetes", "The production-style target is described with pods, services, PVCs, HPAs, PDBs, secrets, config maps, and Pushgateway.", "#326ce5"),
+        ("Airflow", "Scheduled DAGs connect ingestion, DVC/versioning, model retraining, MLflow logging, API validation, performance metrics, and drift checks.", "#017cee"),
+        ("MLflow", "Training runs, metrics, parameters, and model artifacts provide experiment evidence for the selected model.", "#0194e2"),
+        ("Evidently", "Reference/current drift reports explain whether new data still behaves like the training reference.", "#e31b23"),
+        ("Grafana", "Operational dashboards read the Prometheus metrics path populated by the monitoring workflow.", "#f46800"),
+        ("Kubernetes", "The production target runs with pods, services, PVCs, HPAs, PDBs, secrets, config maps, and the model-fetching startup path.", "#326ce5"),
     ]
     cards = ["<div class='demo-grid'>"]
     for title, body, color in items:
@@ -2657,15 +2696,16 @@ def live_demo_page() -> None:
     compact_header(
         "Supporting evidence",
         "What the live screens prove",
-        "CI protects the contracts before merge; MLflow and Evidently show training and drift evidence; Grafana displays the metrics path fed by monitoring.",
+        "Each screen proves a different production concern: reproducibility, automation, traceability, monitoring, visualization, and deployability.",
         "#2088ff",
     )
     services = [
-        ("GitHub Actions", "CI quality gate", "#2088ff"),
-        ("MLflow", "Training evidence", "#0194e2"),
-        ("Evidently", "Drift report", "#e31b23"),
-        ("Prometheus", "Metric scrape path", "#e6522c"),
-        ("Grafana", "Monitoring dashboard", "#f46800"),
+        ("CI", "The branch is safe to merge only after core contracts pass.", "#2088ff"),
+        ("DVC", "Artifacts can be traced back to their raw-data and model pointers.", "#945dd6"),
+        ("Airflow", "The pipeline is visible as scheduled tasks with clear failure points.", "#017cee"),
+        ("MLflow", "Training evidence is separate from runtime monitoring.", "#0194e2"),
+        ("Evidently", "Drift reports compare current data with the reference dataset.", "#e31b23"),
+        ("Kubernetes", "The final runtime is inspected through pods, services, logs, and rollout status.", "#326ce5"),
     ]
     strip = ["<div class='chip-row'>"]
     for name, role, color in services:
@@ -2697,18 +2737,42 @@ PAGES = [
 ]
 
 
+def go_to_page(label: str) -> None:
+    """Keep every navigation control synchronized."""
+    st.session_state.active_page = label
+    st.session_state.page_selector = label
+    st.session_state.top_page_selector = label
+
+
+def sync_page_from_sidebar() -> None:
+    go_to_page(st.session_state.page_selector)
+
+
+def sync_page_from_top_selector() -> None:
+    go_to_page(st.session_state.top_page_selector)
+
+
 def sidebar_navigation() -> tuple[str, int]:
     labels = [label for label, _ in PAGES]
     if "active_page" not in st.session_state:
         st.session_state.active_page = labels[0]
     if st.session_state.active_page not in labels:
         st.session_state.active_page = labels[0]
+    if "page_selector" not in st.session_state:
+        st.session_state.page_selector = st.session_state.active_page
+    if "top_page_selector" not in st.session_state:
+        st.session_state.top_page_selector = st.session_state.active_page
 
     with st.sidebar:
         st.markdown("### Rain Prediction MLOps")
         st.markdown("Production story for the rain prediction project.")
-        selected = st.radio("Sections", labels, index=labels.index(st.session_state.active_page), label_visibility="collapsed")
-        st.session_state.active_page = selected
+        st.radio(
+            "Sections",
+            labels,
+            key="page_selector",
+            label_visibility="collapsed",
+            on_change=sync_page_from_sidebar,
+        )
         current_index = labels.index(st.session_state.active_page)
         html(
             f"""
@@ -2718,13 +2782,23 @@ def sidebar_navigation() -> tuple[str, int]:
         )
         prev_col, next_col = st.columns(2)
         with prev_col:
-            if st.button("Previous", disabled=current_index == 0, width="stretch", key="sidebar_previous"):
-                st.session_state.active_page = labels[current_index - 1]
-                st.rerun()
+            st.button(
+                "← Previous",
+                disabled=current_index == 0,
+                width="stretch",
+                key="sidebar_previous",
+                on_click=go_to_page,
+                args=(labels[max(0, current_index - 1)],),
+            )
         with next_col:
-            if st.button("Next", disabled=current_index == len(labels) - 1, width="stretch", key="sidebar_next"):
-                st.session_state.active_page = labels[current_index + 1]
-                st.rerun()
+            st.button(
+                "Next →",
+                disabled=current_index == len(labels) - 1,
+                width="stretch",
+                key="sidebar_next",
+                on_click=go_to_page,
+                args=(labels[min(len(labels) - 1, current_index + 1)],),
+            )
         st.divider()
         m1, m2 = st.columns(2)
         with m1:
@@ -2740,24 +2814,41 @@ def sidebar_navigation() -> tuple[str, int]:
 
 def deck_controls(index: int, position: str) -> None:
     labels = [label for label, _ in PAGES]
-    prev_col, mid_col, next_col = st.columns([1.1, 4.0, 1.1])
+    prev_col, mid_col, next_col = st.columns([1.5, 3.2, 1.5])
     with prev_col:
-        if st.button("Prev", disabled=index == 0, width="stretch", key=f"{position}_previous"):
-            st.session_state.active_page = labels[index - 1]
-            st.rerun()
+        st.button(
+            "← Previous section",
+            disabled=index == 0,
+            width="stretch",
+            key=f"{position}_previous",
+            on_click=go_to_page,
+            args=(labels[max(0, index - 1)],),
+        )
     with mid_col:
         st.progress((index + 1) / len(labels))
     with next_col:
-        if st.button("Next", disabled=index == len(labels) - 1, width="stretch", key=f"{position}_next"):
-            st.session_state.active_page = labels[index + 1]
-            st.rerun()
+        st.button(
+            "Next section →",
+            disabled=index == len(labels) - 1,
+            width="stretch",
+            key=f"{position}_next",
+            type="primary",
+            on_click=go_to_page,
+            args=(labels[min(len(labels) - 1, index + 1)],),
+        )
 
 
 def main() -> None:
-    st.set_page_config(page_title="Rain Prediction MLOps", layout="wide", initial_sidebar_state="collapsed")
+    st.set_page_config(page_title="Rain Prediction MLOps", layout="wide", initial_sidebar_state="expanded")
     inject_theme()
     selected, index = sidebar_navigation()
     scroll_to_top_on_page_change(selected)
+    st.selectbox(
+        "Jump to section",
+        [label for label, _ in PAGES],
+        key="top_page_selector",
+        on_change=sync_page_from_top_selector,
+    )
     html(f"<div class='slide-badge-row'><div class='slide-badge'>{index + 1} / {len(PAGES)} · {escape(selected.upper())}</div></div>")
     deck_controls(index, "header")
     _, renderer = PAGES[index]
