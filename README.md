@@ -6,6 +6,7 @@
 </p>
 
 <p align="center">
+  <a href="https://rainpredictionmlops.streamlit.app/"><img alt="Live Streamlit presentation" src="https://img.shields.io/badge/Live%20Presentation-Streamlit-FF4B4B?logo=streamlit&logoColor=white"></a>
   <img alt="Python" src="https://img.shields.io/badge/Python-3.12-blue">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-API-009688">
   <img alt="MLflow" src="https://img.shields.io/badge/MLflow-Tracking-0194E2">
@@ -19,22 +20,20 @@
 ## Table of Contents
 
 - [Overview](#overview)
-- [Architecture](#architecture)
-- [Data Science Foundation](#data-science-foundation)
-- [Production MLOps Contribution](#production-mlops-contribution)
-- [Repository Layout](#repository-layout)
-- [Served Model](#served-model)
-- [API](#api)
-- [Environment and Reproducibility Context](#environment-and-reproducibility-context)
-- [Local Integration Context](#local-integration-context)
-- [Kubernetes](#kubernetes)
-- [Airflow Pipelines](#airflow-pipelines)
-- [DVC Artifact Versioning](#dvc-artifact-versioning)
-- [Data Ingestion](#data-ingestion)
-- [Access and Security Context](#access-and-security-context)
-- [Resolved Integration Issues](#resolved-integration-issues)
-- [Security Handling](#security-handling)
-- [Project Notes](#project-notes)
+- [System Design](#system-design)
+- [Project Implementation](#project-implementation)
+  - [Data Science Foundation](#data-science-foundation)
+  - [Production MLOps Contribution](#production-mlops-contribution)
+  - [Repository Layout](#repository-layout)
+- [Model Serving](#model-serving)
+- [Run the Project](#run-the-project)
+- [Deployment and Operations](#deployment-and-operations)
+  - [Kubernetes](#kubernetes)
+  - [Airflow Pipelines](#airflow-pipelines)
+  - [DVC Artifact Versioning](#dvc-artifact-versioning)
+  - [MLflow Tracking](#mlflow-tracking)
+  - [Data Ingestion](#data-ingestion)
+- [Security and Validation](#security-and-validation)
 
 ***
 
@@ -65,60 +64,31 @@ It records the work behind the model, the production architecture, the repositor
 | Deployment | Kubernetes manifests for Airflow, FastAPI, Postgres, Redis, Pushgateway, PVCs, HPA/PDB resources, and services |
 | Local integration | Docker Compose remains as a same-machine integration context for checking the service stack together |
 
+### Project links
+
+| Resource | Link or path |
+|----------|--------------|
+| Live Streamlit presentation | [https://rainpredictionmlops.streamlit.app/](https://rainpredictionmlops.streamlit.app/) |
+| Full setup instructions | [`SETUP_GUIDE.md`](SETUP_GUIDE.md) |
+| Architecture image | [`presentation/assets/rain_mlops_architecture.png`](presentation/assets/rain_mlops_architecture.png) |
+| Streamlit source | [`presentation/mlops_streamlit_presentation.py`](presentation/mlops_streamlit_presentation.py) |
+| Nginx gateway | [`nginx/nginx.conf`](nginx/nginx.conf) |
+| Evidently drift report | [`src/monitoring/drift_report.py`](src/monitoring/drift_report.py) |
+| Airflow DAGs | [`airflow/dags/`](airflow/dags/) |
+| Kubernetes entry point | [`kubernetes/kustomization.yaml`](kubernetes/kustomization.yaml) |
+| DVC remote configuration | [`.dvc/config`](.dvc/config) |
+
 ***
 
-## Architecture
+## System Design
+
+![Rain Prediction MLOps architecture](presentation/assets/rain_mlops_architecture.png)
 
 The architecture is organized as a pipeline that moves from weather observations to a served, monitored, versioned model.
 The first layer is the **data science foundation**, where the raw WeatherAUS-style observations are cleaned, enriched, split chronologically, trained, and evaluated.
 The second layer is the **production MLOps layer**, where the data/model workflow is automated, versioned, tracked, monitored, packaged, and deployed.
 
-The same artifact contract connects both layers.
-Training writes the model, metadata, sample input, and reference dataset.
-The API reads that contract for inference.
-Airflow uses it for retraining and validation.
-DVC versions it.
-MLflow records it.
-Evidently compares live/current data against it.
-Kubernetes runs the services that operate it.
-
-```text
-Weather data sources
-        |
-        v
-Raw WeatherAUS-style dataset
-        |
-        +-----------------------------+
-        |                             |
-        v                             v
-Training data path             Production/inference data path
-        |                             |
-        v                             v
-Cleaning + feature engineering  FastAPI prediction requests
-        |
-        v
-Chronological train / validation / test split
-        |
-        v
-Hybrid CatBoost winner model + metadata contract
-        |
-        +---------------------> FastAPI prediction service
-        |
-        +---------------------> MLflow metrics, params, tags, artifacts
-        |
-        +---------------------> DVC data/model artifact versions
-        |
-        v
-Airflow automated production workflows
-        |
-        +---------------------> daily data extraction and merge
-        +---------------------> end-to-end retraining and artifact refresh
-        +---------------------> data/model versioning snapshots
-        +---------------------> Evidently drift reports
-        |
-        v
-Kubernetes production-style runtime
-```
+The same artifact contract connects both layers. Training writes the model, metadata, sample input, and reference dataset. FastAPI reads that contract for inference, Airflow uses it for retraining and validation, DVC versions it, MLflow records it, Evidently checks it, and Kubernetes operates the runtime services.
 
 ### Runtime roles
 
@@ -146,7 +116,9 @@ Kubernetes production-style runtime
 
 ***
 
-## Data Science Foundation
+## Project Implementation
+
+### Data Science Foundation
 
 The data science stage transformed Australian weather observations into a supervised binary classification problem.
 The target is `rain_tomorrow`.
@@ -157,7 +129,7 @@ The project therefore does not stop at a notebook score.
 It produces a stable feature list, metadata file, decision threshold, sample input, categorical feature list, numeric fill values, and monitoring reference dataset.
 Those outputs are the contract used later by FastAPI, Airflow, DVC, MLflow, Evidently, and Kubernetes.
 
-### Data preparation and feature engineering
+#### Data preparation and feature engineering
 
 The raw table was reshaped into a production feature contract.
 The preparation work included schema normalization, missing-value handling, temporal features, location enrichment, meteorological transformations, lag features, and categorical handling.
@@ -173,7 +145,7 @@ The preparation work included schema normalization, missing-value handling, temp
 | Moisture/stability features | Dew point and stability-style variables represent humidity and atmospheric behavior beyond raw columns |
 | API contract support | A valid `sample_input.json` is stored with the model so inference tests and demos use the same feature expectations as training |
 
-### Modeling strategy
+#### Modeling strategy
 
 Several modeling directions were explored in the project, including baseline modeling, feature-aligned tabular modeling, location-aware refinements, missingness-aware experiments, rolling robustness validation, and sequence/deep-learning benchmarks.
 The final served model is a **hybrid CatBoost classifier** because it fits the project data shape well: mixed numeric/categorical tabular weather features, missingness indicators, location effects, and nonlinear interactions.
@@ -201,7 +173,7 @@ The latest served artifact reports:
 The selected threshold prioritizes practical rain-event detection rather than only optimizing a default probability cutoff.
 That threshold is stored in metadata and reused by serving and validation code.
 
-### Data science outputs
+#### Data science outputs
 
 The data science layer produces the assets that the production layer operates.
 These files are treated as model-system artifacts, not temporary notebook outputs.
@@ -219,7 +191,7 @@ These files are treated as model-system artifacts, not temporary notebook output
 
 ***
 
-## Production MLOps Contribution
+### Production MLOps Contribution
 
 The production MLOps contribution turns the data science result into an operating workflow.
 The model is not treated as a standalone file.
@@ -230,7 +202,7 @@ The production layer focused on three responsibilities:
 | Area | What was implemented |
 |------|----------------------|
 | DVC | Large data/model files are represented by Git-tracked DVC pointers and stored outside Git through the configured DagsHub remote |
-| Airflow | Four DAGs coordinate daily ingestion, end-to-end retraining, DVC versioning, MLflow handoff, API validation, and drift monitoring |
+| Airflow | Five DAGs coordinate daily ingestion, end-to-end retraining, DVC versioning, MLflow handoff, API validation, model performance, and drift monitoring |
 | Kubernetes | Airflow, FastAPI, Postgres, Redis, Pushgateway, PVCs, services, HPAs, and PDBs are represented through `kubernetes/kustomization.yaml` |
 
 The work was not only a packaging step around a trained model.
@@ -245,7 +217,7 @@ The project was reorganized so that each production action leaves an auditable t
 | Portability | Container images, Airflow settings, Kubernetes manifests, DVC targets, and model artifact paths stay aligned so the workflow behaves consistently across machines and clusters. |
 | Safety of automation | DAGs update local artifacts and reports, but remote DVC/Git publishing remains a deliberate merge-time action. |
 
-### Implemented production workflow
+#### Implemented production workflow
 
 | Workflow stage | Production behavior |
 |----------------|---------------------|
@@ -276,7 +248,7 @@ Final validation confirmed:
 
 ***
 
-## Repository Layout
+### Repository Layout
 
 ```text
 rain_prediction_mlops/
@@ -292,29 +264,39 @@ rain_prediction_mlops/
 |   |-- processed/               Processed reference/location metadata
 |   |-- raw/                     DVC-tracked source weather data
 |   `-- sample/                  API/demo sample payloads
-|-- deployment/                  Monitoring deployment assets used by the local stack
+|-- deployment/
+|   |-- grafana/                 Dashboard provisioning and JSON dashboards
+|   `-- prometheus/              Scrape configuration and alert rules
 |-- docker/
 |   |-- airflow/                 Airflow image and dependency pins
 |   |-- frontend/                Streamlit/frontend service material
 |   |-- gateway/                 Gateway image material
 |   |-- model-fetcher/           Model artifact fetcher image
+|   |-- prediction/              Prediction container support material
 |   |-- prediction-api/          Official FastAPI image
 |   |-- testing/                 Containerized test helpers
 |   |-- traffic-generator/       Synthetic prediction traffic for monitoring
 |   `-- training/                Training image material
 |-- kubernetes/                  Production-style Kubernetes manifests and kustomization
 |-- models/
-|   `-- final_winner/            Served model, metadata, and sample input
+|   |-- final_winner/            Served model, metadata, and sample input
+|   |-- missingness_aware_hybrid_model/
+|   |-- svm_classifier_benchmark/
+|   `-- winner_model_calibration/
 |-- nginx/                       Gateway configuration and local certificate placeholders
 |-- notebooks/                   Data science exploration and modeling notebooks
+|-- presentation/                Streamlit presentation and visual assets
 |-- references/                  Climate/location references and validation records
 |-- reports/
 |   |-- figures/
+|   |-- monitoring/              Evidently and model-performance reports
 |   `-- versioning/              Airflow/DVC manifest output area
 |-- src/
 |   |-- config/                  Shared paths and constants
 |   |-- data/                    Extraction, merge, and freshness modules
+|   |-- docker/                  Source-side container definitions
 |   |-- features/                Feature engineering pipeline
+|   |-- model_monitoring/        Prediction replay and outcome evaluation
 |   |-- models/                  Training, inference, and experiment code
 |   |-- monitoring/              Evidently drift reporting
 |   |-- prediction_api/          FastAPI application
@@ -323,10 +305,11 @@ rain_prediction_mlops/
 |   `-- versioning/              DVC and MLflow integration code
 |-- tests/                       Contract, orchestration, dependency, MLflow, and drift tests
 |-- docker-compose.yml           Local integration context
-`-- requirements.txt
+|-- requirements.txt
+`-- SETUP_GUIDE.md               Full environment and deployment instructions
 ```
 
-### Key directories
+#### Key directories
 
 | Path | Purpose |
 |------|---------|
@@ -337,6 +320,9 @@ rain_prediction_mlops/
 | `src/prediction_api/` | FastAPI app that loads the final model and exposes prediction/metadata/metrics endpoints |
 | `src/versioning/` | DVC snapshot logic and MLflow logging payload construction |
 | `src/monitoring/` | Evidently drift report generation |
+| `src/model_monitoring/` | Historical prediction replay and outcome-based performance evaluation |
+| `nginx/` | TLS gateway, Basic Auth, rate limiting, and reverse-proxy configuration |
+| `presentation/` | Hosted Streamlit presentation source and architecture assets |
 | `docker/airflow/` | Airflow Dockerfile and dependency pins aligned with drift-monitoring requirements |
 | `docker/prediction-api/` | Container image definition for the official FastAPI service |
 | `docker/model-fetcher/` | Kubernetes init-container image for retrieving DVC model artifacts |
@@ -348,31 +334,21 @@ rain_prediction_mlops/
 | `references/` | Climate references, station metadata, validation notes, and integration records |
 | `reports/versioning/` | Extraction, freshness, input, output, and DVC-status manifests emitted by automation |
 | `tests/` | Focused tests for Airflow automation, dependency pins, MLflow payloads, drift reporting, and API contract behavior |
+| `SETUP_GUIDE.md` | DagsHub, TLS, Nginx, Docker image, Kubernetes, and troubleshooting steps |
 
 ***
 
-## Served Model
+## Model Serving
+
+### Served Model
 
 The repository serves one final winner model for rainfall prediction.
 This model is the production candidate used by the API, Airflow validation, DVC versioning, MLflow logging, Evidently monitoring, and Kubernetes deployment.
 The served artifact is intentionally packaged with metadata and a sample input so every runtime reads the same contract.
 
-| Item | Value |
-|------|-------|
-| Model | Final hybrid CatBoost |
-| Artifact | `models/final_winner/winner_model.joblib` |
-| Feature count | 68 |
-| Target | `rain_tomorrow` |
-| Threshold | 0.58 |
-| Holdout ROC-AUC | 0.8945 |
-| Holdout F1-score | 0.6839 |
-| Holdout precision | 0.6386 |
-| Holdout recall | 0.7361 |
-| Training rows | 113,488 |
-| Test rows | 28,297 |
-| Test period | 2015-12-04 to 2026-07-12 |
+The production artifact is `models/final_winner/winner_model.joblib`. It uses the 68-feature contract and decision threshold documented in [Modeling strategy](#modeling-strategy), so the evaluation results are stated once and reused across the project.
 
-### Served artifact package
+#### Served artifact package
 
 | File | Role |
 |------|------|
@@ -384,7 +360,7 @@ The served artifact is intentionally packaged with metadata and a sample input s
 The threshold is fixed in metadata so the API, Airflow retraining checks, and monitoring reports use the same decision boundary.
 The model metadata also stores the feature list, categorical feature list, numeric fill values, CatBoost parameters, sample input path, and artifact paths.
 
-### Prediction contract
+#### Prediction contract
 
 The prediction contract is stable around the 68-feature order stored in metadata.
 FastAPI accepts a compact business-facing request with key weather fields, fills or derives the remaining model features from the saved contract where appropriate, and returns the binary rain decision with confidence.
@@ -399,13 +375,13 @@ FastAPI accepts a compact business-facing request with key weather fields, fills
 
 ***
 
-## API
+### API
 
 The API layer is the serving layer for the trained model.
 It exposes the model health, model metadata, and prediction behavior expected by the rest of the stack.
 This report records how the MLOps workflow depends on the running API service.
 
-### Endpoints
+#### Endpoints
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
@@ -417,19 +393,21 @@ This report records how the MLOps workflow depends on the running API service.
 | GET | `/model/features` | Admin feature contract and numeric fill values |
 | GET | `/metrics` | Prometheus metrics exposed by the API service |
 
-### API role in the MLOps system
+#### API role in the MLOps system
 
 | Integration point | Role |
 |-------------------|------|
 | Local integration context | Runs the API service alongside the existing local services for same-machine checks |
-| Kubernetes | Runs the API as a 3-replica deployment with HPA support |
+| Kubernetes | Runs the API with readiness/liveness probes and HPA support for 1-2 replicas |
 | Airflow | Uses the API health endpoint as part of the production validation path |
 | DVC/model artifacts | The API loads the DVC-tracked winner model and metadata contract |
 | Monitoring | Prediction traffic and API metrics feed the monitoring layer |
 
 ***
 
-## Environment and Reproducibility Context
+## Run the Project
+
+### Reproducibility
 
 The project was structured to be reproducible across a local workstation, a VM, and a local Kubernetes cluster.
 Python dependency files, Dockerfiles, DVC pointers, Airflow DAGs, and Kubernetes manifests work together so that the same model artifacts and workflow can be inspected outside the original notebook environment.
@@ -450,13 +428,30 @@ This keeps the merged Git state consistent with the external artifact store.
 
 ***
 
-## Local Integration Context
+### Quick Start
+
+[`SETUP_GUIDE.md`](SETUP_GUIDE.md) contains the full setup sequence for DagsHub credentials, Nginx TLS certificates, Basic Auth users, Docker images, the k3d cluster, Kubernetes Secrets, deployment, verification, and troubleshooting.
+
+For the hosted project presentation, open [https://rainpredictionmlops.streamlit.app/](https://rainpredictionmlops.streamlit.app/).
+
+For a local presentation run:
+
+```bash
+python -m pip install -r presentation/requirements.txt
+python -m streamlit run presentation/mlops_streamlit_presentation.py
+```
+
+For the full local or Kubernetes runtime, complete the secret and certificate steps in the setup guide before starting services.
+
+***
+
+### Local Integration
 
 Docker Compose exists in the repository as a local integration context.
 It is useful for same-machine checks when the full service stack needs to be started together, but it is not the deployment target for the production-style architecture.
 The deployment/runtime target described in this report is Kubernetes.
 
-### Integrated services
+#### Integrated services
 
 | Service | URL |
 |---------|-----|
@@ -466,7 +461,7 @@ The deployment/runtime target described in this report is Kubernetes.
 | Prometheus | `http://localhost:9090` |
 | Grafana | `http://localhost:3000` |
 
-### Local integration role in the project
+#### Local integration role in the project
 
 | Area | What the local stack demonstrates |
 |------|----------------------------------|
@@ -477,12 +472,14 @@ The deployment/runtime target described in this report is Kubernetes.
 | Prediction traffic | Synthetic prediction traffic keeps monitoring dashboards populated |
 | Gateway/dashboard integration | Nginx, Prometheus, and Grafana are integrated as gateway and monitoring services |
 
-During the final review, the local Airflow stack, FastAPI, MLflow, Pushgateway, Grafana, node-exporter, and prediction traffic were running.
-Nginx and Prometheus still had local mount cleanup items during final review, so this report keeps the detailed readiness discussion focused on Airflow, DVC, Kubernetes, and the data flow.
+The local stack defines Airflow, FastAPI, MLflow, Pushgateway, Grafana, Prometheus, Node Exporter, prediction traffic, and the Nginx gateway in [`docker-compose.yml`](docker-compose.yml).
+Nginx mounts its gateway configuration, `.htpasswd`, and TLS certificate directory as read-only runtime files.
 
 ***
 
-## Kubernetes
+## Deployment and Operations
+
+### Kubernetes
 
 Kubernetes is the production-style deployment layer for the project.
 The Kubernetes work focused on making Airflow and the model-serving stack run as separated services with persistent state, predictable scheduling, autoscaling hooks, and repeatable manifests.
@@ -490,7 +487,7 @@ The Kubernetes work focused on making Airflow and the model-serving stack run as
 The validation environment used **Docker Desktop Kubernetes**, not K3s.
 The manifests are still portable to K3s, Minikube, or a VM cluster, with non-Docker-Desktop clusters using either image loading or registry-published images.
 
-### Kubernetes implementation process
+#### Kubernetes implementation process
 
 The Kubernetes work separated the parts that need different lifecycle behavior in a cluster.
 Airflow was split into a webserver deployment, one scheduler deployment, and worker deployment so UI/API traffic, scheduling, and task execution can scale or restart independently.
@@ -510,27 +507,30 @@ Scheduling was defined through Kubernetes environment variables and kept consist
 | `MODEL_VERSIONING_SCHEDULE` | `0 4 * * *` | Data/model versioning and manifests |
 | `DRIFT_MONITORING_SCHEDULE` | `0 7 * * *` | Drift report and Pushgateway metric handoff |
 
-### Implemented resources
+#### Implemented resources
 
 | Resource | Role in the project |
 |----------|---------------------|
 | `rain-prediction-api` | FastAPI model-serving deployment integrated into the Kubernetes stack |
-| `rain-prediction-airflow-webserver` | Airflow UI/API layer with 3 replicas |
+| `rain-prediction-airflow-webserver` | Airflow UI/API layer |
 | `rain-prediction-airflow-scheduler` | Single stable scheduler replica to avoid duplicate scheduler races |
 | `rain-prediction-airflow-worker` | Celery workers with HPA support |
 | `airflow-postgres` | StatefulSet for Airflow metadata database |
 | `airflow-redis` | StatefulSet for Celery broker |
 | `airflow-migrate-inesgas-20260713` | Airflow database migration and admin-user setup job |
 | `pushgateway` | Batch metric target for the drift-monitoring DAG |
+| `nginx-gateway` | TLS, Basic Auth, rate limiting, and routing entry point |
+| `prometheus` and `node-exporter` | Application, pod, and node metric collection |
+| `grafana` | Provisioned infrastructure, API, and model dashboards |
+| `mlflow` | Experiment tracking service with persistent artifact storage |
 | PVCs | Persistent project workspace, Airflow logs, Postgres data, and Redis data |
 | HPAs | API and Airflow worker autoscaling rules |
 | PDBs | Availability protection for API, webserver, scheduler, and workers |
 
-The default `kubernetes/kustomization.yaml` applies this API, Airflow, state, scaling, and Pushgateway bundle.
-Nginx, Prometheus, and Grafana manifests exist in the repository as integration material, but they are not part of the default kustomization.
-This keeps the Kubernetes deployment boundary clear: the production-style runtime validated for this report is FastAPI, Airflow, Postgres, Redis, Pushgateway, PVCs, HPA/PDB resources, and the DVC/model artifact path.
+The default `kubernetes/kustomization.yaml` applies the API, Airflow, state, scaling, Pushgateway, Nginx, Prometheus, Grafana, Node Exporter, and MLflow resources.
+Nginx is the LoadBalancer entry point. The other application and monitoring services remain internal ClusterIP services.
 
-### Persistence design
+#### Persistence design
 
 Kubernetes uses persistent volumes for state that survives pod replacement:
 
@@ -547,7 +547,7 @@ This prevents stale PVC contents from hiding new DAG support code after a rollou
 The Airflow project and log PVCs use `ReadWriteOnce`, which matched the Docker Desktop Kubernetes validation environment.
 For a multi-node K3s, Minikube, or VM cluster, the same design should be backed by storage that can satisfy the selected scheduling pattern: shared read-write storage for pods that may land on different nodes, or node placement rules that keep the Airflow pods using those PVCs on the same node.
 
-### Portability design
+#### Portability design
 
 The Kubernetes manifests use local image names for the Airflow, FastAPI, and model-fetcher containers.
 The portability assumptions recorded during validation were:
@@ -557,7 +557,7 @@ The portability assumptions recorded during validation were:
 - Non-Docker-Desktop clusters need image loading or registry-published image tags because the manifests reference local image names.
 - The Airflow image tag used by the manifests is `rain_prediction_mlops-airflow:inesgas-airflow-20260713`.
 
-### Validated Kubernetes state
+#### Validated Kubernetes state
 
 The Kubernetes layer was checked after the Airflow/DVC fixes.
 The server-side manifest dry-run passed, pods were ready, PVCs were bound, and the DagsHub secret was present after validation.
@@ -568,9 +568,9 @@ Validated runtime state:
 |-------|--------|
 | Manifest validation | Server-side kustomize dry-run passed |
 | Airflow scheduler | `1/1` ready |
-| Airflow webserver | `3/3` ready |
-| Airflow workers | `2/2` ready, HPA configured for 2-3 |
-| FastAPI | HPA configured for 3-4 replicas |
+| Airflow webserver | Deployment declares 1 replica |
+| Airflow workers | Deployment declares 1 replica, HPA configured for 1-2 |
+| FastAPI | Deployment declares 1 replica, HPA configured for 1-2 |
 | Postgres | `1/1` ready |
 | Redis | `1/1` ready |
 | Pushgateway | `1/1` ready |
@@ -580,7 +580,7 @@ Validated runtime state:
 
 ***
 
-## Airflow Pipelines
+### Airflow Pipelines
 
 Airflow is the orchestration layer for the production workflow.
 It connects data ingestion, retraining, DVC versioning, MLflow logging, and drift monitoring into scheduled and repeatable DAGs.
@@ -589,7 +589,7 @@ The Airflow configuration was changed from a manual-only setup into an automated
 The DAGs are unpaused, scheduled, and visible in Kubernetes Airflow.
 The same DAG set was also checked in the local Airflow stack as a parity check.
 
-### Airflow automation design
+#### Airflow automation design
 
 The Airflow work turned separate local scripts into a production sequence with clear task order, task outputs, and failure points.
 The DAGs do not only call the training script.
@@ -603,7 +603,7 @@ The DAGs are also deliberately local-first.
 They can update local `.dvc` pointer files and reports inside Docker or Kubernetes, but they do not push to GitHub or DagsHub from inside an Airflow run.
 This keeps automation reproducible while leaving remote publishing tied to review and merge.
 
-### Implemented DAGs
+#### Implemented DAGs
 
 | DAG | Production role | Status |
 |-----|-----------------|--------|
@@ -611,8 +611,9 @@ This keeps automation reproducible while leaving remote publishing tied to revie
 | `end_to_end_mlops_pipeline` | Full extract, version, train, log, validate workflow | Loaded, unpaused, and scheduled |
 | `data_model_versioning` | DVC-aware data/model versioning and MLflow model logging | Loaded and unpaused |
 | `drift_monitoring` | Evidently reference-vs-current drift check with Pushgateway metrics | Loaded and unpaused |
+| `model_performance_and_drift` | Historical prediction replay, actual-outcome matching, and Pushgateway metrics | Loaded and scheduled |
 
-### `end_to_end_mlops_pipeline`
+#### `end_to_end_mlops_pipeline`
 
 The end-to-end DAG is the main production storyline.
 It starts from weather data extraction and finishes with refreshed model artifacts and validation outputs.
@@ -629,7 +630,7 @@ Workflow behavior:
 8. Logs model metadata and metrics to MLflow.
 9. Validates that the expected artifacts exist for serving and monitoring.
 
-### `data_model_versioning`
+#### `data_model_versioning`
 
 This DAG focuses on the versioning and audit trail around the training pipeline.
 It records the state of the input data, the output model, and the model metadata so that a training run can be traced after it finishes.
@@ -646,7 +647,7 @@ Workflow behavior:
 8. Log parameters, metrics, metadata artifacts, and model artifacts to MLflow
 9. Write the DVC status manifest
 
-### `drift_monitoring`
+#### `drift_monitoring`
 
 This DAG runs an Evidently data drift check between the training reference dataset (`data/monitoring/reference_dataset.csv`, written by `train_winner.py` on every training run) and a rolling window of `data/preprocessed/rain_model_dataset_aligned.csv`.
 The monitoring window was set to cover a full seasonal cycle because short windows can falsely report complete drift when they compare one season against a year-round reference.
@@ -658,7 +659,13 @@ Workflow behavior:
 3. Write `reports/monitoring/drift_<timestamp>.html` and `drift_<timestamp>_summary.json`
 4. Push summary drift metrics to Pushgateway for dashboard/alert integration
 
-### Airflow validation
+The report monitors humidity, pressure, temperature, and wind-gust columns. It publishes `rain_dataset_drift_detected`, `rain_drifted_columns_count`, `rain_drifted_columns_share`, and `rain_drift_check_last_run_timestamp_seconds` through Pushgateway. The implementation is in [`src/monitoring/drift_report.py`](src/monitoring/drift_report.py).
+
+#### `model_performance_and_drift`
+
+This DAG runs after daily ingestion. It replays historical station rows through `/predict`, joins the predictions to following-day rainfall, and pushes RMSE, MAE, and R2 gauges to Pushgateway. The replay and evaluation code is in [`src/model_monitoring/`](src/model_monitoring/).
+
+#### Airflow validation
 
 The Airflow layer was validated with Kubernetes as the production-style runtime target.
 The local stack was also checked as a development parity signal because the repository still includes a same-machine integration environment.
@@ -667,19 +674,19 @@ The local stack was also checked as a development parity signal because the repo
 |------------|--------|
 | Local Airflow health | Scheduler and metadatabase healthy |
 | Local Airflow DAG imports | No import errors |
-| Local Airflow DAG list | Four expected DAGs loaded and unpaused |
+| Local Airflow DAG list | Five expected DAGs loaded and unpaused |
 | Local Airflow DVC check | Raw/model DVC targets up to date inside the Airflow runtime |
 | Local Airflow MLflow check | Model logging dry-run found the model artifact, metadata, config, and sample input |
 | Kubernetes Airflow DAG imports | No import errors |
-| Kubernetes Airflow DAG list | Four expected DAGs loaded and unpaused |
+| Kubernetes Airflow DAG list | Five expected DAGs loaded and unpaused |
 | Kubernetes Airflow DVC check | Raw/model DVC targets up to date inside the scheduler runtime |
 | Kubernetes service check | Airflow reached FastAPI `/health` and Pushgateway `/-/healthy` |
 
 ***
 
-## DVC Artifact Versioning
+### DVC Artifact Versioning
 
-### DVC
+#### Tracked artifacts
 
 DVC is used because the project contains large assets that are kept outside Git.
 Git stores the `.dvc` pointer files, while DVC stores the actual raw data and model objects in the configured DagsHub remote.
@@ -695,7 +702,9 @@ Tracked production assets:
 | DVC target | Purpose |
 |------------|---------|
 | `data/raw/weatherAUS.csv.dvc` | Raw weather dataset used as the training source |
+| `data/preprocessed/rain_model_dataset.csv.dvc` | Prepared modeling dataset |
 | `data/preprocessed/rain_model_dataset_aligned.csv.dvc` | Aligned feature table used for monitoring comparison |
+| `data/preprocessed/rain_model_dataset_feature_experiments.csv.dvc` | Feature-experiment dataset |
 | `data/monitoring/reference_dataset.csv.dvc` | Drift reference dataset produced by training |
 | `models/final_winner/winner_model.joblib.dvc` | Final served model artifact |
 
@@ -704,7 +713,7 @@ This means a fresh machine can resolve the committed raw/model artifacts from Da
 The local training workflow can also produce a newer `data/monitoring/reference_dataset.csv`.
 During the latest validation, a newer local reference dataset was produced but its remote upload did not complete, so the committed pointer intentionally remained on the last remote-synced object.
 
-### Versioning process
+#### Versioning process
 
 The DVC process was built around traceability rather than only file storage.
 The versioning module reads every `.dvc` pointer, extracts the tracked path, hash, hash type, and size, and writes that state into JSON manifests under `reports/versioning/`.
@@ -719,10 +728,8 @@ Two snapshots are recorded around training:
 
 The workflow also writes a DVC status manifest after each automated run.
 That status file is useful because it records whether the local runtime changed artifacts without silently assuming those changes are already available in the remote store.
-During the final DVC cleanup, the raw dataset and winner model object were pushed successfully to DagsHub before merge.
-The newer local monitoring reference dataset was left uncommitted because its remote upload did not complete, preserving a repository state that can still be pulled cleanly on another machine.
 
-### MLflow integration context
+### MLflow Tracking
 
 MLflow records model metadata, metrics, parameters, and artifacts.
 This section is included because the Airflow and training flow connect to a tracking target.
@@ -763,13 +770,13 @@ Both runtimes found the model artifact, metadata, config, and sample input and p
 
 ***
 
-## Data Ingestion
+### Data Ingestion
 
 The ingestion layer was designed so new WeatherAUS-format data can enter the same path as the original training data.
 Incoming rows are not treated as a separate prediction-only file.
 They are merged into the raw dataset and then included in the next Airflow-driven training cycle.
 
-### Extraction and merge process
+#### Extraction and merge process
 
 The ingestion code supports existing WeatherAUS files, compressed files, online CSV/ZIP sources, Kaggle-style sources, and recent Open-Meteo daily observations.
 Regardless of source, the data is converted back into the raw WeatherAUS-style training table before training sees it.
@@ -780,7 +787,7 @@ It compares incoming rows against existing rows by the `Date` and `Location` key
 Rows with new keys are inserted, rows with repeated keys replace the older version, unchanged overlaps are counted, and duplicate incoming keys are reported in the manifest.
 This makes repeated daily ingestion safe because rerunning a DAG does not blindly duplicate the same station-date observation.
 
-### Supported incoming data modes
+#### Supported incoming data modes
 
 The extractor supports several sources:
 
@@ -797,7 +804,7 @@ The important production behavior is the same across sources:
 4. Airflow versions the raw dataset pointer with DVC.
 5. Training reloads the full raw dataset and rebuilds the modeling features.
 
-### How new data reaches training and test
+#### How new data reaches training and test
 
 After new rows are extracted, they follow the normal training path.
 The training module reloads `data/raw/weatherAUS.csv`, rebuilds features, and creates chronological splits.
@@ -824,7 +831,9 @@ Each successful training run writes:
 
 ***
 
-## Access and Security Context
+## Security and Validation
+
+### Access and Security
 
 | Service | Deployment | URL | Username | Password | Notes |
 |---------|------------|-----|----------|----------|-------|
@@ -835,13 +844,39 @@ Each successful training run writes:
 | Grafana | Local stack | `http://localhost:3000` | `admin` | `admin` | Local monitoring UI |
 | Prometheus | Local stack | `http://localhost:9090` | none | none | Local monitoring only |
 | Nginx gateway | Local stack | `https://localhost` | local `.htpasswd` users | stored as hashes | Local gateway file, not committed |
+| Streamlit presentation | Hosted | [rainpredictionmlops.streamlit.app](https://rainpredictionmlops.streamlit.app/) | none | none | Public presentation and prediction demonstration |
 
 The project separates committed configuration from local secrets.
 `.env`, `.dvc/config.local`, TLS certificates, and gateway password hashes are local runtime material and are not part of the committed model or orchestration report.
 
+| Security area | Project handling |
+|---------------|------------------|
+| Environment variables | `.env` is git-ignored; `.env.example` records placeholder structure only |
+| DVC credentials | Local authentication material lives in `.dvc/config.local`, outside version control |
+| Gateway passwords | Nginx password material is represented by hashes in `nginx/.htpasswd` |
+| Shared defaults | Local demonstration credentials remain visible in compose/manifests and are separate from private secrets |
+| Password recovery | Plaintext source values are not recoverable from `nginx/.htpasswd` hashes |
+
+#### Nginx security layers
+
+Nginx is the external gateway for the API and operational tools. The hosted Streamlit presentation is separate from this protected runtime.
+
+| Layer | Current handling | Main path |
+|-------|------------------|-----------|
+| TLS | Port 80 redirects to 443. TLS 1.2 and 1.3 are enabled. | [`nginx/nginx.conf`](nginx/nginx.conf) |
+| Public routes | `/health`, `/locations`, `/docs`, and `/openapi.json` remain public. | [`nginx/nginx.conf`](nginx/nginx.conf) |
+| Protected routes | `/predict`, `/predict/batch`, `/model/*`, `/metrics`, Airflow, Grafana, Prometheus, and MLflow use Basic Auth. | [`nginx/nginx.conf`](nginx/nginx.conf) |
+| Identity forwarding | Nginx passes the authenticated username in `X-Forwarded-User`; FastAPI applies user and admin roles. | [`src/prediction_api/main.py`](src/prediction_api/main.py) |
+| Rate limiting | Prediction traffic is limited to 100 requests per minute per IP, with burst limits of 20 for single requests and 10 for batches. | [`nginx/nginx.conf`](nginx/nginx.conf) |
+| Payload limit | Request bodies are limited to 1 MB. | [`nginx/nginx.conf`](nginx/nginx.conf) |
+| Kubernetes secret | TLS files and `.htpasswd` are mounted from `nginx-tls-and-auth`. | [`kubernetes/nginx-deployment.yaml`](kubernetes/nginx-deployment.yaml) |
+| Service boundary | Nginx is the LoadBalancer. FastAPI and monitoring services remain internal ClusterIP services. | [`kubernetes/nginx-service.yaml`](kubernetes/nginx-service.yaml) |
+
+The FastAPI service trusts the username forwarded by Nginx, so external clients must use the gateway rather than bypassing it.
+
 ***
 
-## Resolved Integration Issues
+### Resolved Integration Issues
 
 Several integration problems were found and resolved during the production-readiness work.
 This section records the work behind the final state.
@@ -859,16 +894,3 @@ This section records the work behind the final state.
 | Drift reference artifact | A newer local reference dataset existed, but its DVC upload timed out | Its pointer was intentionally not committed, preserving a pullable merged state |
 
 ***
-
-## Security Handling
-
-| Security area | Project handling |
-|---------------|------------------|
-| Environment variables | `.env` is git-ignored; `.env.example` records placeholder structure only |
-| DVC credentials | Local authentication material lives in `.dvc/config.local`, outside version control |
-| Gateway passwords | Nginx password material is represented by hashes in `nginx/.htpasswd` |
-| Shared defaults | Local demonstration credentials remain visible in compose/manifests and are separate from private secrets |
-| Password recovery | Plaintext source values are not recoverable from `nginx/.htpasswd` hashes |
-
-***
-
