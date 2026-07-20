@@ -874,23 +874,3 @@ Nginx is the external gateway for the API and operational tools. The hosted Stre
 
 The FastAPI service trusts the username forwarded by Nginx, so external clients must use the gateway rather than bypassing it.
 
-***
-
-### Resolved Integration Issues
-
-Several integration problems were found and resolved during the production-readiness work.
-This section records the work behind the final state.
-
-| Area | Issue found | Resolution |
-|------|-------------|------------|
-| Airflow scheduling | End-to-end automation and drift monitoring were not fully scheduled in the earlier configuration | Airflow schedule variables were aligned so ingestion, E2E training/versioning, and drift monitoring run as automated DAGs |
-| Airflow dependencies | Drift monitoring required Evidently, Plotly, and Prometheus client support in the Airflow image | Airflow dependency pins and Dockerfile installation order were aligned with Airflow 2.10.5 constraints |
-| MLflow target | Local Airflow could point to hosted DagsHub MLflow and fail without credentials | Local Airflow now uses local MLflow by default through `AIRFLOW_MLFLOW_TRACKING_URI` |
-| Kubernetes scheduler | Multiple Airflow schedulers caused duplicate serialized DAG writes and instability | Kubernetes Airflow scheduler was reduced to one stable replica |
-| Kubernetes PVC source refresh | PVC-backed Airflow pods could keep stale project code after image rebuilds | Airflow init containers now refresh source code from the image into the PVC-backed workspace |
-| Kubernetes Pushgateway | Drift DAG expected Pushgateway, but the Kubernetes stack did not include it earlier | Pushgateway deployment and service are included in `kubernetes/kustomization.yaml` |
-| Kubernetes credentials | The model-fetcher init container needed DagsHub credentials | `dagshub-credentials` was created in the `rain-prediction` namespace during validation |
-| DVC artifact consistency | Updated raw data/model pointers would break other machines if objects were not uploaded | The new raw dataset and winner model objects were pushed to the DagsHub DVC remote before merge |
-| Drift reference artifact | A newer local reference dataset existed, but its DVC upload timed out | Its pointer was intentionally not committed, preserving a pullable merged state |
-
-***
