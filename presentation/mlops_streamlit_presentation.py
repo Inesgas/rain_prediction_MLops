@@ -22,6 +22,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PRESENTATION_DIR = PROJECT_ROOT / "presentation"
 ASSET_DIR = PRESENTATION_DIR / "assets"
 DATA_SCIENCE_ASSET_DIR = ASSET_DIR / "data_science"
+ANIMATION_FONT_DIR = ASSET_DIR / "fonts"
+ANIMATION_FONT_FILES = [
+    ANIMATION_FONT_DIR / "DejaVuSans.ttf",
+    ANIMATION_FONT_DIR / "DejaVuSans-Bold.ttf",
+]
 
 METADATA_PATH = PROJECT_ROOT / "models" / "final_winner" / "metadata.json"
 MODEL_CONFIG_PATH = PROJECT_ROOT / "models" / "final_winner" / "model_config.json"
@@ -190,6 +195,11 @@ def svg_animation_bytes(svg: str) -> bytes:
             svg_string=frame_svg,
             width=output_width,
             height=output_height,
+            skip_system_fonts=True,
+            font_files=[str(path) for path in ANIMATION_FONT_FILES],
+            font_family="DejaVu Sans",
+            sans_serif_family="DejaVu Sans",
+            text_rendering="optimize_legibility",
         )
         rendered = Image.open(io.BytesIO(png)).convert("RGBA")
         background = Image.new("RGBA", rendered.size, "#f5f8fa")
@@ -235,7 +245,16 @@ def svg_sequence_animation_bytes(svgs: tuple[str, ...]) -> bytes:
             source_height = float(viewbox.group(3)) if viewbox else 650.0
             output_width = 1200
             output_height = round(output_width * source_height / source_width)
-            png = resvg_py.svg_to_bytes(svg_string=frame_svg, width=output_width, height=output_height)
+            png = resvg_py.svg_to_bytes(
+                svg_string=frame_svg,
+                width=output_width,
+                height=output_height,
+                skip_system_fonts=True,
+                font_files=[str(path) for path in ANIMATION_FONT_FILES],
+                font_family="DejaVu Sans",
+                sans_serif_family="DejaVu Sans",
+                text_rendering="optimize_legibility",
+            )
             rendered = Image.open(io.BytesIO(png)).convert("RGBA")
             background = Image.new("RGBA", rendered.size, "#f5f8fa")
             background.alpha_composite(rendered)
@@ -262,7 +281,7 @@ def styled_svg(markup: str) -> str | None:
     svg = markup[start : end + len("</svg>")]
     style = """
       <style>
-        text { font-family: 'Segoe UI', Arial, sans-serif; }
+        text { font-family: 'DejaVu Sans', sans-serif; }
         .svg-label { fill:#173848; font-weight:850; }
         .svg-muted { fill:#667b85; font-weight:650; }
         .svg-kicker { font-weight:900; letter-spacing:1.6px; }
